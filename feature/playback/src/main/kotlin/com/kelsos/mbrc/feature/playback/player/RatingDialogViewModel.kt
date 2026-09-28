@@ -18,9 +18,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class RatingDialogViewModel(
@@ -39,7 +41,9 @@ class RatingDialogViewModel(
     .map { list -> list.filter { it.isEnabled } }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), CustomTagFieldConfig.DEFAULT_TAGS)
 
-  val trackDetails: StateFlow<TrackDetails> = appState.playingTrackDetails
+  private val _optimisticTags = MutableStateFlow<Map<String, String>>(emptyMap())
+  private val _trackDetails = MutableStateFlow(appState.playingTrackDetails.value)
+  val trackDetails: StateFlow<TrackDetails> get() = _trackDetails.asStateFlow()
 
   private val _genreSuggestions = MutableStateFlow<List<String>>(emptyList())
   val genreSuggestions: StateFlow<List<String>> = _genreSuggestions.asStateFlow()
@@ -48,6 +52,21 @@ class RatingDialogViewModel(
     viewModelScope.launch {
       appState.playingTrackRating.map { it.rating }.distinctUntilChanged().collect {
         _rating.emit(it)
+      }
+    }
+    viewModelScope.launch {
+      appState.playingTrackDetails.collect { serverDetails ->
+        var current = serverDetails
+        for ((tag, value) in _optimisticTags.value) {
+          current = current.withTagValue(tag, value)
+        }
+        _trackDetails.value = current
+      }
+    }
+    viewModelScope.launch {
+      appState.playingTrack.collect {
+        _optimisticTags.value = emptyMap()
+        _trackDetails.value = appState.playingTrackDetails.value
       }
     }
     viewModelScope.launch {
@@ -84,6 +103,8 @@ class RatingDialogViewModel(
    * Changes a custom tag for the playing track.
    */
   fun changeTag(tagName: String, value: String) {
+    _optimisticTags.update { it + (tagName to value) }
+    _trackDetails.value = _trackDetails.value.withTagValue(tagName, value)
     viewModelScope.launch {
       userActionUseCase.setTrackTag(tagName, value)
     }

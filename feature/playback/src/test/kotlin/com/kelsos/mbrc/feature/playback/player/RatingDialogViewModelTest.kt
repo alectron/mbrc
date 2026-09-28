@@ -4,8 +4,10 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.cash.turbine.test
 import com.google.common.truth.Truth.assertThat
 import com.kelsos.mbrc.core.common.state.AppStateFlow
+import com.kelsos.mbrc.core.common.state.BasicTrackInfo
 import com.kelsos.mbrc.core.common.state.LfmRating
 import com.kelsos.mbrc.core.common.state.TrackDetails
+import com.kelsos.mbrc.core.common.state.TrackInfo
 import com.kelsos.mbrc.core.common.state.TrackRating
 import com.kelsos.mbrc.core.common.test.testDispatcher
 import com.kelsos.mbrc.core.common.test.testDispatcherModule
@@ -37,11 +39,15 @@ class RatingDialogViewModelTest : KoinTest {
 
   private val trackRatingFlow = MutableStateFlow(TrackRating())
   private val halfStarRatingFlow = MutableStateFlow(false)
+  private val playingTrackFlow = MutableStateFlow<TrackInfo>(BasicTrackInfo())
+  private val playingTrackDetailsFlow = MutableStateFlow(TrackDetails())
 
   private val testModule = module {
     single<AppStateFlow> {
       mockk(relaxed = true) {
         every { playingTrackRating } returns trackRatingFlow
+        every { playingTrack } returns playingTrackFlow
+        every { playingTrackDetails } returns playingTrackDetailsFlow
       }
     }
     single<UserActionUseCase> { mockk(relaxed = true) }
@@ -212,6 +218,8 @@ class RatingDialogViewModelTest : KoinTest {
     val mockUserActionUseCase: UserActionUseCase = mockk(relaxed = true)
     val mockAppState: AppStateFlow = mockk(relaxed = true) {
       every { playingTrackRating } returns MutableStateFlow(TrackRating())
+      every { playingTrack } returns MutableStateFlow<TrackInfo>(BasicTrackInfo())
+      every { playingTrackDetails } returns MutableStateFlow(TrackDetails.EMPTY)
     }
     val mockSettingsManager: SettingsManager = mockk(relaxed = true) {
       every { halfStarRatingFlow } returns MutableStateFlow(false)
@@ -251,6 +259,7 @@ class RatingDialogViewModelTest : KoinTest {
     val mockUserActionUseCase: UserActionUseCase = mockk(relaxed = true)
     val mockAppState: AppStateFlow = mockk(relaxed = true) {
       every { playingTrackRating } returns MutableStateFlow(TrackRating())
+      every { playingTrack } returns MutableStateFlow<TrackInfo>(BasicTrackInfo())
       every { playingTrackDetails } returns MutableStateFlow(TrackDetails.EMPTY)
     }
     val mockSettingsManager: SettingsManager = mockk(relaxed = true) {
@@ -267,6 +276,19 @@ class RatingDialogViewModelTest : KoinTest {
           it.protocol == Protocol.NowPlayingDetails
         }
       )
+    }
+  }
+
+  @Test
+  fun `changeTag should optimistically update trackDetails immediately`() = runTest(testDispatcher) {
+    viewModel.trackDetails.test {
+      val initial = awaitItem()
+      assertThat(initial.getTagValue("Energy")).isEmpty()
+
+      viewModel.changeTag("Energy", "8")
+      testScheduler.advanceUntilIdle()
+      val updated = awaitItem()
+      assertThat(updated.getTagValue("Energy")).isEqualTo("8")
     }
   }
 }

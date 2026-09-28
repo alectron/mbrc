@@ -111,6 +111,39 @@ data class TrackDetails(
   }
 
   /**
+   * Returns a copy of [TrackDetails] with the specified tag updated to [value].
+   * Used for instant optimistic updates before the server syncs.
+   */
+  fun withTagValue(tagName: String, value: String): TrackDetails {
+    if (tagName.equals("genre", ignoreCase = true)) return copy(genre = value)
+    if (tagName.equals("albumartist", ignoreCase = true)) return copy(albumArtist = value)
+    if (tagName.equals("composer", ignoreCase = true)) return copy(composer = value)
+    if (tagName.equals("comment", ignoreCase = true)) return copy(comment = value)
+    if (tagName.equals("grouping", ignoreCase = true)) return copy(grouping = value)
+    if (tagName.equals("publisher", ignoreCase = true)) return copy(publisher = value)
+
+    if (custom1Name.equals(tagName, true) || tagName.equals("custom1", true)) return copy(custom1 = value)
+    if (custom2Name.equals(tagName, true) || tagName.equals("custom2", true)) return copy(custom2 = value)
+    if (custom3Name.equals(tagName, true) || tagName.equals("custom3", true)) return copy(custom3 = value)
+    if (custom4Name.equals(tagName, true) || tagName.equals("custom4", true)) return copy(custom4 = value)
+    if (custom5Name.equals(tagName, true) || tagName.equals("custom5", true)) return copy(custom5 = value)
+    if (custom6Name.equals(tagName, true) || tagName.equals("custom6", true)) return copy(custom6 = value)
+    if (custom7Name.equals(tagName, true) || tagName.equals("custom7", true)) return copy(custom7 = value)
+    if (custom8Name.equals(tagName, true) || tagName.equals("custom8", true)) return copy(custom8 = value)
+    if (custom9Name.equals(tagName, true) || tagName.equals("custom9", true)) return copy(custom9 = value)
+    if (custom10Name.equals(tagName, true) || tagName.equals("custom10", true)) return copy(custom10 = value)
+    if (custom11Name.equals(tagName, true) || tagName.equals("custom11", true)) return copy(custom11 = value)
+    if (custom12Name.equals(tagName, true) || tagName.equals("custom12", true)) return copy(custom12 = value)
+    if (custom13Name.equals(tagName, true) || tagName.equals("custom13", true)) return copy(custom13 = value)
+    if (custom14Name.equals(tagName, true) || tagName.equals("custom14", true)) return copy(custom14 = value)
+    if (custom15Name.equals(tagName, true) || tagName.equals("custom15", true)) return copy(custom15 = value)
+    if (custom16Name.equals(tagName, true) || tagName.equals("custom16", true)) return copy(custom16 = value)
+
+    // Fallback: assign to custom1 if empty or unmatched
+    return copy(custom1 = value, custom1Name = if (custom1Name.isBlank()) tagName else custom1Name)
+  }
+
+  /**
    * Returns true if this contains any meaningful data.
    */
   fun hasData(): Boolean = this != EMPTY
