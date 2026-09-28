@@ -78,6 +78,7 @@ fun PlayerBottomSheet(
   val genreSuggestions by viewModel.genreSuggestions.collectAsStateWithLifecycle()
   val confirmedTags by viewModel.confirmedTags.collectAsStateWithLifecycle()
   val tagSuggestionLimit by viewModel.tagSuggestionLimit.collectAsStateWithLifecycle()
+  val tagSuggestionsMap by viewModel.tagSuggestionsMap.collectAsStateWithLifecycle()
 
   ModalBottomSheet(
     onDismissRequest = onDismiss,
@@ -258,9 +259,8 @@ fun PlayerBottomSheet(
         )
 
         customTagFields.forEach { config ->
-          val tagSuggestions = remember(config.tag, trackDetails, tagSuggestionLimit, confirmedTags) {
-            viewModel.getSuggestionsForTag(config.tag)
-          }
+          val normalizedKey = config.tag.trim().lowercase()
+          val tagSuggestions = tagSuggestionsMap[normalizedKey] ?: viewModel.getSuggestionsForTag(config.tag)
           CustomTagFieldRow(
             config = config,
             currentValue = trackDetails.getTagValue(config.tag),

@@ -26,6 +26,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.withContext
+
 class RatingDialogViewModel(
   private val userActionUseCase: UserActionUseCase,
   private val appState: AppStateFlow,
@@ -57,6 +60,9 @@ class RatingDialogViewModel(
   private val _genreSuggestions = MutableStateFlow<List<String>>(emptyList())
   val genreSuggestions: StateFlow<List<String>> = _genreSuggestions.asStateFlow()
 
+  private val _tagSuggestionsMap = MutableStateFlow<Map<String, List<String>>>(emptyMap())
+  val tagSuggestionsMap: StateFlow<Map<String, List<String>>> = _tagSuggestionsMap.asStateFlow()
+
   init {
     viewModelScope.launch {
       appState.playingTrackRating.map { it.rating }.distinctUntilChanged().collect {
@@ -86,10 +92,16 @@ class RatingDialogViewModel(
     }
     viewModelScope.launch(Dispatchers.IO) {
       loadConfirmedTags()
-      _genreSuggestions.value = getSuggestionsForTag("genre")
-      suggestionDao?.getAllConfirmedTagValuesFlow()?.collect {
+      refreshAllSuggestions()
+
+      val confirmedFlow = suggestionDao?.getAllConfirmedTagValuesFlow() ?: flowOf(emptyList())
+      combine(
+        customTagFields,
+        tagSuggestionLimit,
+        confirmedFlow
+      ) { _, _, _ -> }.collect {
         loadConfirmedTags()
-        _genreSuggestions.value = getSuggestionsForTag("genre")
+        refreshAllSuggestions()
       }
     }
   }
@@ -109,16 +121,8 @@ class RatingDialogViewModel(
     }
   }
 
-  /**
-   * Returns merged suggestions for the given tag:
-   * 1. LRU recent tags first
-   * 2. Followed by alphabetical suggestions from SQLite
-   * Capped to the user-configured limit.
-   */
-  fun getSuggestionsForTag(tag: String): List<String> {
+  private fun computeSuggestions(tag: String, limit: Int): List<String> {
     val normalizedTag = tag.trim().lowercase()
-    val limit = tagSuggestionLimit.value
-
     val recent = recentTagsStore?.getRecentTags(normalizedTag) ?: emptyList()
 
     val fromDb = try {
@@ -154,6 +158,33 @@ class RatingDialogViewModel(
     return result
   }
 
+  private suspend fun refreshAllSuggestions() = withContext(Dispatchers.IO) {
+    val limit = tagSuggestionLimit.value
+    val tags = (customTagFields.value.map { it.tag } + "genre")
+      .map { it.trim().lowercase() }
+      .distinct()
+    val map = mutableMapOf<String, List<String>>()
+    for (tag in tags) {
+      map[tag] = computeSuggestions(tag, limit)
+    }
+    _tagSuggestionsMap.value = map
+    _genreSuggestions.value = map["genre"] ?: emptyList()
+  }
+
+  /**
+   * Returns merged suggestions for the given tag:
+   * 1. In-memory cache from IO thread first (safe on Main Thread)
+   * 2. Fallback to direct computation
+   */
+  fun getSuggestionsForTag(tag: String): List<String> {
+    val normalized = tag.trim().lowercase()
+    val cached = _tagSuggestionsMap.value[normalized]
+    if (cached != null && cached.isNotEmpty()) {
+      return cached
+    }
+    return computeSuggestions(tag, tagSuggestionLimit.value)
+  }
+
   /**
    * Checks whether a tag value is confirmed in MusicBee / SQLite cache.
    */
@@ -181,13 +212,14 @@ class RatingDialogViewModel(
   fun changeTag(tagName: String, value: String) {
     _optimisticTags.update { it + (tagName to value) }
     _trackDetails.value = _trackDetails.value.withTagValue(tagName, value)
-    viewModelScope.launch {
+    viewModelScope.launch(Dispatchers.IO) {
       value.split(";").forEach { piece ->
         val trimmed = piece.trim()
         if (trimmed.isNotBlank()) {
           recentTagsStore?.recordTagUsed(tagName, trimmed)
         }
       }
+      refreshAllSuggestions()
       userActionUseCase.setTrackTag(tagName, value)
     }
   }
