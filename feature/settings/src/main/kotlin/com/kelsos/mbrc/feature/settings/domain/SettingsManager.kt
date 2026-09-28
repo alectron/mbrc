@@ -1,6 +1,7 @@
 package com.kelsos.mbrc.feature.settings.domain
 
 import com.kelsos.mbrc.core.common.settings.ChangeLogChecker
+import com.kelsos.mbrc.core.common.settings.CustomTagFieldConfig
 import com.kelsos.mbrc.core.common.settings.LibrarySettings
 import com.kelsos.mbrc.core.common.settings.TrackAction
 import com.kelsos.mbrc.feature.settings.data.CallAction
@@ -27,6 +28,7 @@ interface SettingsManager :
   val halfStarRatingFlow: Flow<Boolean>
   val showRatingOnPlayerFlow: Flow<Boolean>
   val keepScreenOnFlow: Flow<KeepScreenOn>
+  val customTagFieldsFlow: Flow<List<CustomTagFieldConfig>>
 
   // Async update methods for changing settings (type-safe with sealed classes)
   suspend fun setTheme(theme: Theme)
@@ -38,6 +40,7 @@ interface SettingsManager :
   suspend fun setHalfStarRating(enabled: Boolean)
   suspend fun setShowRatingOnPlayer(enabled: Boolean)
   suspend fun setKeepScreenOn(mode: KeepScreenOn)
+  suspend fun setCustomTagFields(fields: List<CustomTagFieldConfig>)
 
   // Async utility methods
   override suspend fun checkShouldShowChangeLog(): Boolean

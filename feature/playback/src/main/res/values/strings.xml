@@ -101,4 +101,13 @@
   <!-- Unknown values -->
   <string name="unknown_artist">Unknown artist</string>
   <string name="unknown_title">Unknown title</string>
+
+  <!-- Custom Tags -->
+  <string name="custom_tags_section_title">Custom Tags</string>
+  <string name="custom_tags_add">Add %1$s</string>
+  <string name="custom_tags_add_title">Add to %1$s</string>
+  <string name="custom_tags_value_hint">Tag value</string>
+  <string name="custom_tags_clear">Clear</string>
+  <string name="custom_tags_empty">No tags set</string>
+  <string name="custom_tags_edit_title">Edit %1$s</string>
 </resources>

@@ -5,10 +5,12 @@ import app.cash.turbine.test
 import com.google.common.truth.Truth.assertThat
 import com.kelsos.mbrc.core.common.state.AppStateFlow
 import com.kelsos.mbrc.core.common.state.LfmRating
+import com.kelsos.mbrc.core.common.state.TrackDetails
 import com.kelsos.mbrc.core.common.state.TrackRating
 import com.kelsos.mbrc.core.common.test.testDispatcher
 import com.kelsos.mbrc.core.common.test.testDispatcherModule
 import com.kelsos.mbrc.core.networking.protocol.base.Protocol
+import com.kelsos.mbrc.core.networking.protocol.payloads.TagChangeRequest
 import com.kelsos.mbrc.core.networking.protocol.usecases.UserActionUseCase
 import com.kelsos.mbrc.feature.settings.domain.SettingsManager
 import io.mockk.coVerify
@@ -48,7 +50,13 @@ class RatingDialogViewModelTest : KoinTest {
         every { halfStarRatingFlow } returns this@RatingDialogViewModelTest.halfStarRatingFlow
       }
     }
-    singleOf(::RatingDialogViewModel)
+    single {
+      RatingDialogViewModel(
+        userActionUseCase = get(),
+        appState = get(),
+        settingsManager = get()
+      )
+    }
   }
 
   private val viewModel: RatingDialogViewModel by inject()
@@ -218,6 +226,45 @@ class RatingDialogViewModelTest : KoinTest {
       mockUserActionUseCase.perform(
         match {
           it.protocol == Protocol.NowPlayingRating && it.data == true
+        }
+      )
+    }
+  }
+
+  @Test
+  fun `changeTag should send user action with NowPlayingTagChange and TagChangeRequest`() = runTest(testDispatcher) {
+    viewModel.changeTag("Energy", "7")
+    advanceUntilIdle()
+
+    coVerify {
+      userActionUseCase.perform(
+        match {
+          it.protocol == Protocol.NowPlayingTagChange &&
+            it.data == TagChangeRequest("Energy", "7")
+        }
+      )
+    }
+  }
+
+  @Test
+  fun `viewModel should request current track details on init`() = runTest(testDispatcher) {
+    val mockUserActionUseCase: UserActionUseCase = mockk(relaxed = true)
+    val mockAppState: AppStateFlow = mockk(relaxed = true) {
+      every { playingTrackRating } returns MutableStateFlow(TrackRating())
+      every { playingTrackDetails } returns MutableStateFlow(TrackDetails.EMPTY)
+    }
+    val mockSettingsManager: SettingsManager = mockk(relaxed = true) {
+      every { halfStarRatingFlow } returns MutableStateFlow(false)
+      every { customTagFieldsFlow } returns MutableStateFlow(emptyList())
+    }
+
+    RatingDialogViewModel(mockUserActionUseCase, mockAppState, mockSettingsManager)
+    advanceUntilIdle()
+
+    coVerify {
+      mockUserActionUseCase.perform(
+        match {
+          it.protocol == Protocol.NowPlayingDetails
         }
       )
     }

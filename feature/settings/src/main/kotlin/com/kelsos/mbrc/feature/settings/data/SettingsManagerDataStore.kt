@@ -9,6 +9,7 @@ import com.kelsos.mbrc.core.common.settings.AlbumSortPreference
 import com.kelsos.mbrc.core.common.settings.AlbumViewMode
 import com.kelsos.mbrc.core.common.settings.ArtistSortField
 import com.kelsos.mbrc.core.common.settings.ArtistSortPreference
+import com.kelsos.mbrc.core.common.settings.CustomTagFieldConfig
 import com.kelsos.mbrc.core.common.settings.GenreSortField
 import com.kelsos.mbrc.core.common.settings.GenreSortPreference
 import com.kelsos.mbrc.core.common.settings.SortPreference
@@ -138,6 +139,11 @@ class SettingsManagerDataStore(
     KeepScreenOn.fromString(mode)
   }
 
+  override val customTagFieldsFlow: Flow<List<CustomTagFieldConfig>> = dataStore.data.map { preferences ->
+    val encoded = preferences[PreferenceKeys.CUSTOM_TAG_FIELDS] ?: DefaultValues.CUSTOM_TAG_FIELDS
+    CustomTagFieldConfig.decodeList(encoded)
+  }
+
   override val genreSortPreferenceFlow: Flow<GenreSortPreference> = dataStore.data.map { prefs ->
     val encoded = prefs[PreferenceKeys.GENRE_SORT] ?: DefaultValues.GENRE_SORT
     SortPreference.decode(encoded, GenreSortField::fromString, GenreSortField.NAME)
@@ -226,6 +232,12 @@ class SettingsManagerDataStore(
   override suspend fun setKeepScreenOn(mode: KeepScreenOn) {
     dataStore.edit { preferences ->
       preferences[PreferenceKeys.KEEP_SCREEN_ON] = mode.string
+    }
+  }
+
+  override suspend fun setCustomTagFields(fields: List<CustomTagFieldConfig>) {
+    dataStore.edit { preferences ->
+      preferences[PreferenceKeys.CUSTOM_TAG_FIELDS] = CustomTagFieldConfig.encodeList(fields)
     }
   }
 

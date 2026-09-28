@@ -72,6 +72,16 @@
   <string name="setting_keep_screen_on_while_charging">While charging</string>
   <string name="setting_keep_screen_on_always">Always</string>
 
+  <!-- Custom Tag Fields settings -->
+  <string name="settings_custom_tag_fields">Custom Tag Fields</string>
+  <string name="settings_custom_tag_fields_summary">Configure tag fields shown in the player rating &amp; tags bottom sheet</string>
+  <string name="settings_custom_tags_add">Add Tag Field</string>
+  <string name="settings_custom_tags_add_title">Add Custom Tag Field</string>
+  <string name="settings_custom_tags_name_label">Tag Name (e.g. Energy, Genre, Instruments, Custom1)</string>
+  <string name="settings_custom_tags_multi_value">Multi-value (chips)</string>
+  <string name="settings_custom_tags_single_value">Single-value / Numeric</string>
+  <string name="settings_custom_tags_empty">No custom tag fields configured</string>
+
   <!-- About -->
   <string name="preferences_about_version">MusicBee Remote Version</string>
   <string name="preferences_category_about">About MusicBee Remote</string>

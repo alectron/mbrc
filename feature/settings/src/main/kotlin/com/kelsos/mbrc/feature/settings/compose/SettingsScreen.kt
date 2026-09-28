@@ -21,9 +21,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
@@ -33,6 +39,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -43,6 +52,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kelsos.mbrc.core.common.settings.CustomTagFieldConfig
 import com.kelsos.mbrc.core.common.settings.TrackAction
 import com.kelsos.mbrc.core.common.utilities.AppInfo
 import com.kelsos.mbrc.core.platform.service.ServiceRestarter
@@ -83,6 +93,7 @@ data class SettingsContentState(
   val trackDefaultAction: TrackAction = TrackAction.PlayNow,
   val halfStarRatingEnabled: Boolean = true,
   val showRatingOnPlayerEnabled: Boolean = false,
+  val customTagFields: List<CustomTagFieldConfig> = CustomTagFieldConfig.DEFAULT_TAGS,
   val visibleDialog: SettingsDialogType? = null
 )
 
@@ -103,6 +114,10 @@ interface ISettingsActions {
   val onShowRatingOnPlayerChanged: (Boolean) -> Unit
   val onTrackDefaultActionClick: () -> Unit
   val onTrackDefaultActionSelected: (TrackAction) -> Unit
+  val onAddCustomTagFieldClick: () -> Unit get() = {}
+  val onCustomTagFieldAdded: (String, Boolean) -> Unit get() = { _, _ -> }
+  val onCustomTagFieldRemoved: (Int) -> Unit get() = {}
+  val onCustomTagFieldToggled: (Int) -> Unit get() = {}
   val onNavigateToLicenses: () -> Unit
   val onNavigateToAppLicense: () -> Unit
   val onDismissDialog: () -> Unit
@@ -124,6 +139,10 @@ object EmptySettingsActions : ISettingsActions {
   override val onShowRatingOnPlayerChanged: (Boolean) -> Unit = {}
   override val onTrackDefaultActionClick: () -> Unit = {}
   override val onTrackDefaultActionSelected: (TrackAction) -> Unit = {}
+  override val onAddCustomTagFieldClick: () -> Unit = {}
+  override val onCustomTagFieldAdded: (String, Boolean) -> Unit = { _, _ -> }
+  override val onCustomTagFieldRemoved: (Int) -> Unit = {}
+  override val onCustomTagFieldToggled: (Int) -> Unit = {}
   override val onNavigateToLicenses: () -> Unit = {}
   override val onNavigateToAppLicense: () -> Unit = {}
   override val onDismissDialog: () -> Unit = {}
@@ -419,6 +438,11 @@ private fun SettingsContent(
 
     SettingsDivider()
 
+    // Custom Tag Fields Section
+    CustomTagsSettingsSection(viewModel = viewModel)
+
+    SettingsDivider()
+
     // Library Settings Section
     LibrarySettingsSection(viewModel = viewModel)
 
@@ -482,6 +506,16 @@ fun SettingsScreenContent(
 
       SettingsDivider()
 
+      // Custom Tag Fields Section
+      CustomTagsContentSection(
+        customTagFields = state.customTagFields,
+        onAddTagClick = actions.onAddCustomTagFieldClick,
+        onToggleTag = actions.onCustomTagFieldToggled,
+        onRemoveTag = actions.onCustomTagFieldRemoved
+      )
+
+      SettingsDivider()
+
       // Library Settings Section
       LibraryContentSection(
         trackDefaultAction = state.trackDefaultAction,
@@ -532,6 +566,14 @@ fun SettingsScreenContent(
       currentAction = state.trackDefaultAction,
       onActionSelected = { action ->
         actions.onTrackDefaultActionSelected(action)
+        actions.onDismissDialog()
+      },
+      onDismiss = actions.onDismissDialog
+    )
+
+    SettingsDialogType.AddCustomTagField -> AddCustomTagFieldDialog(
+      onTagAdded = { name, isMulti ->
+        actions.onCustomTagFieldAdded(name, isMulti)
         actions.onDismissDialog()
       },
       onDismiss = actions.onDismissDialog
@@ -626,6 +668,176 @@ private fun RatingContentSection(
       onCheckedChange = onShowRatingOnPlayerChanged
     )
   }
+}
+
+/**
+ * Custom Tag Fields settings section.
+ */
+@Composable
+private fun CustomTagsSettingsSection(viewModel: SettingsViewModel) {
+  val customTagFields by viewModel.customTagFields.collectAsStateWithLifecycle()
+  val visibleDialog by viewModel.visibleDialog.collectAsStateWithLifecycle()
+
+  CustomTagsContentSection(
+    customTagFields = customTagFields,
+    onAddTagClick = { viewModel.showDialog(SettingsDialogType.AddCustomTagField) },
+    onToggleTag = { index -> viewModel.toggleCustomTagField(index) },
+    onRemoveTag = { index -> viewModel.removeCustomTagField(index) }
+  )
+
+  if (visibleDialog == SettingsDialogType.AddCustomTagField) {
+    AddCustomTagFieldDialog(
+      onTagAdded = { name, isMulti ->
+        viewModel.addCustomTagField(name, isMulti)
+        viewModel.hideDialog()
+      },
+      onDismiss = { viewModel.hideDialog() }
+    )
+  }
+}
+
+/**
+ * Custom Tag Fields section for content composable.
+ */
+@Composable
+internal fun CustomTagsContentSection(
+  customTagFields: List<CustomTagFieldConfig>,
+  onAddTagClick: () -> Unit,
+  onToggleTag: (Int) -> Unit,
+  onRemoveTag: (Int) -> Unit
+) {
+  SettingsSection(title = stringResource(R.string.settings_custom_tag_fields)) {
+    if (customTagFields.isEmpty()) {
+      Text(
+        text = stringResource(R.string.settings_custom_tags_empty),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+      )
+    } else {
+      customTagFields.forEachIndexed { index, config ->
+        CustomTagFieldItem(
+          config = config,
+          onToggle = { onToggleTag(index) },
+          onDelete = { onRemoveTag(index) }
+        )
+      }
+    }
+
+    SettingsItem(
+      title = stringResource(R.string.settings_custom_tags_add),
+      subtitle = stringResource(R.string.settings_custom_tag_fields_summary),
+      onClick = onAddTagClick
+    )
+  }
+}
+
+@Composable
+private fun CustomTagFieldItem(
+  config: CustomTagFieldConfig,
+  onToggle: () -> Unit,
+  onDelete: () -> Unit
+) {
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .padding(horizontal = 16.dp, vertical = 8.dp),
+    verticalAlignment = Alignment.CenterVertically
+  ) {
+    Column(modifier = Modifier.weight(1f)) {
+      Text(
+        text = config.tag,
+        style = MaterialTheme.typography.titleMedium
+      )
+      Spacer(modifier = Modifier.height(2.dp))
+      Text(
+        text = if (config.isMultiValue) {
+          stringResource(R.string.settings_custom_tags_multi_value)
+        } else {
+          stringResource(R.string.settings_custom_tags_single_value)
+        },
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
+    }
+
+    Switch(
+      checked = config.isEnabled,
+      onCheckedChange = { onToggle() }
+    )
+
+    Spacer(modifier = Modifier.width(8.dp))
+
+    IconButton(onClick = onDelete) {
+      Icon(
+        imageVector = Icons.Filled.Delete,
+        contentDescription = stringResource(R.string.connection_manager_delete),
+        tint = MaterialTheme.colorScheme.onSurfaceVariant
+      )
+    }
+  }
+}
+
+@Composable
+private fun AddCustomTagFieldDialog(
+  onTagAdded: (String, Boolean) -> Unit,
+  onDismiss: () -> Unit
+) {
+  var tagName by remember { mutableStateOf("") }
+  var isMultiValue by remember { mutableStateOf(false) }
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text(stringResource(R.string.settings_custom_tags_add_title)) },
+    text = {
+      Column(modifier = Modifier.fillMaxWidth()) {
+        OutlinedTextField(
+          value = tagName,
+          onValueChange = { tagName = it },
+          label = { Text(stringResource(R.string.settings_custom_tags_name_label)) },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .clickable { isMultiValue = !isMultiValue }
+            .padding(vertical = 4.dp),
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Checkbox(
+            checked = isMultiValue,
+            onCheckedChange = { isMultiValue = it }
+          )
+          Spacer(modifier = Modifier.width(8.dp))
+          Text(
+            text = stringResource(R.string.settings_custom_tags_multi_value),
+            style = MaterialTheme.typography.bodyMedium
+          )
+        }
+      }
+    },
+    confirmButton = {
+      TextButton(
+        onClick = {
+          if (tagName.isNotBlank()) {
+            onTagAdded(tagName.trim(), isMultiValue)
+          }
+        },
+        enabled = tagName.isNotBlank()
+      ) {
+        Text(stringResource(R.string.common_add))
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) {
+        Text(stringResource(android.R.string.cancel))
+      }
+    }
+  )
 }
 
 /**

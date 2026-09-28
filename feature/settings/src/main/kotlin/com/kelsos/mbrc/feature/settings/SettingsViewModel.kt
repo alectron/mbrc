@@ -2,6 +2,7 @@ package com.kelsos.mbrc.feature.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kelsos.mbrc.core.common.settings.CustomTagFieldConfig
 import com.kelsos.mbrc.core.common.settings.TrackAction
 import com.kelsos.mbrc.core.platform.service.ServiceRestarter
 import com.kelsos.mbrc.feature.settings.data.CallAction
@@ -23,6 +24,7 @@ sealed class SettingsDialogType {
   data object IncomingCallAction : SettingsDialogType()
   data object TrackDefaultAction : SettingsDialogType()
   data object KeepScreenOn : SettingsDialogType()
+  data object AddCustomTagField : SettingsDialogType()
 }
 
 /**
@@ -58,6 +60,9 @@ class SettingsViewModel(
 
   val keepScreenOn: StateFlow<KeepScreenOn> = settingsManager.keepScreenOnFlow
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), KeepScreenOn.Never)
+
+  val customTagFields: StateFlow<List<CustomTagFieldConfig>> = settingsManager.customTagFieldsFlow
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), CustomTagFieldConfig.DEFAULT_TAGS)
 
   // Dialog state
   private val _visibleDialog = MutableStateFlow<SettingsDialogType?>(null)
@@ -136,6 +141,50 @@ class SettingsViewModel(
   fun updateKeepScreenOn(mode: KeepScreenOn) {
     viewModelScope.launch {
       settingsManager.setKeepScreenOn(mode)
+    }
+  }
+
+  /**
+   * Updates the list of custom tag fields.
+   */
+  fun updateCustomTagFields(fields: List<CustomTagFieldConfig>) {
+    viewModelScope.launch {
+      settingsManager.setCustomTagFields(fields)
+    }
+  }
+
+  /**
+   * Adds a new custom tag field if not already present.
+   */
+  fun addCustomTagField(tag: String, isMultiValue: Boolean) {
+    val trimmed = tag.trim()
+    if (trimmed.isEmpty()) return
+    val current = customTagFields.value
+    if (current.any { it.tag.equals(trimmed, ignoreCase = true) }) return
+    val updated = current + CustomTagFieldConfig(tag = trimmed, isMultiValue = isMultiValue, isEnabled = true)
+    updateCustomTagFields(updated)
+  }
+
+  /**
+   * Removes a custom tag field at the given index.
+   */
+  fun removeCustomTagField(index: Int) {
+    val current = customTagFields.value.toMutableList()
+    if (index in current.indices) {
+      current.removeAt(index)
+      updateCustomTagFields(current)
+    }
+  }
+
+  /**
+   * Toggles the enabled state of a custom tag field at the given index.
+   */
+  fun toggleCustomTagField(index: Int) {
+    val current = customTagFields.value.toMutableList()
+    if (index in current.indices) {
+      val item = current[index]
+      current[index] = item.copy(isEnabled = !item.isEnabled)
+      updateCustomTagFields(current)
     }
   }
 

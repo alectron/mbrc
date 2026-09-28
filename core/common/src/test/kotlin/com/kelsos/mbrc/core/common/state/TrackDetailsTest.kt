@@ -43,4 +43,34 @@ class TrackDetailsTest {
     assertThat(TrackDetails(discCount = "2").formatDiscNumber()).isEmpty()
     assertThat(TrackDetails().formatDiscNumber()).isEmpty()
   }
+
+  @Test
+  fun `getAllCustomTags returns populated custom tags`() {
+    val details = TrackDetails(
+      custom1 = "8",
+      custom1Name = "Energy",
+      custom2 = "Electric Guitar; Bass",
+      custom2Name = "Instruments"
+    )
+
+    val tags = details.getAllCustomTags()
+    assertThat(tags).hasSize(2)
+    assertThat(tags[0]).isEqualTo(CustomTagEntry(slot = "Custom1", name = "Energy", value = "8"))
+    assertThat(tags[1]).isEqualTo(CustomTagEntry(slot = "Custom2", name = "Instruments", value = "Electric Guitar; Bass"))
+  }
+
+  @Test
+  fun `getTagValue resolves standard and custom tag names case-insensitively`() {
+    val details = TrackDetails(
+      genre = "Progressive Rock",
+      custom1 = "9",
+      custom1Name = "Energy"
+    )
+
+    assertThat(details.getTagValue("genre")).isEqualTo("Progressive Rock")
+    assertThat(details.getTagValue("Genre")).isEqualTo("Progressive Rock")
+    assertThat(details.getTagValue("Energy")).isEqualTo("9")
+    assertThat(details.getTagValue("custom1")).isEqualTo("9")
+    assertThat(details.getTagValue("NonExistent")).isEmpty()
+  }
 }

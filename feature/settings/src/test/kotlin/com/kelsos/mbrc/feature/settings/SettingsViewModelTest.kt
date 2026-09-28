@@ -2,6 +2,7 @@ package com.kelsos.mbrc.feature.settings
 
 import app.cash.turbine.test
 import com.google.common.truth.Truth.assertThat
+import com.kelsos.mbrc.core.common.settings.CustomTagFieldConfig
 import com.kelsos.mbrc.core.common.settings.TrackAction
 import com.kelsos.mbrc.core.common.test.testDispatcher
 import com.kelsos.mbrc.core.common.test.testDispatcherModule
@@ -43,6 +44,7 @@ class SettingsViewModelTest : KoinTest {
   private val trackDefaultActionFlow = MutableStateFlow<TrackAction>(TrackAction.PlayNow)
   private val halfStarRatingFlow = MutableStateFlow(false)
   private val showRatingOnPlayerFlow = MutableStateFlow(false)
+  private val customTagFieldsFlow = MutableStateFlow(CustomTagFieldConfig.DEFAULT_TAGS)
 
   private val testModule = module {
     single { settingsManager }
@@ -60,6 +62,7 @@ class SettingsViewModelTest : KoinTest {
         this@SettingsViewModelTest.trackDefaultActionFlow
       every { halfStarRatingFlow } returns this@SettingsViewModelTest.halfStarRatingFlow
       every { showRatingOnPlayerFlow } returns this@SettingsViewModelTest.showRatingOnPlayerFlow
+      every { customTagFieldsFlow } returns this@SettingsViewModelTest.customTagFieldsFlow
     }
     serviceRestarter = mockk(relaxed = true)
 
@@ -334,4 +337,46 @@ class SettingsViewModelTest : KoinTest {
         assertThat(awaitItem()).isFalse()
       }
     }
+
+  @Test
+  fun `addCustomTagField should call setCustomTagFields with new tag`() = runTest(testDispatcher) {
+    viewModel.addCustomTagField("BPM", false)
+    advanceUntilIdle()
+
+    coVerify {
+      settingsManager.setCustomTagFields(
+        match { list ->
+          list.any { it.tag == "BPM" && !it.isMultiValue && it.isEnabled }
+        }
+      )
+    }
+  }
+
+  @Test
+  fun `removeCustomTagField should remove item and call setCustomTagFields`() = runTest(testDispatcher) {
+    viewModel.removeCustomTagField(0)
+    advanceUntilIdle()
+
+    coVerify {
+      settingsManager.setCustomTagFields(
+        match { list ->
+          list.size == 2 && list.none { it.tag == "Energy" }
+        }
+      )
+    }
+  }
+
+  @Test
+  fun `toggleCustomTagField should toggle enabled state and call setCustomTagFields`() = runTest(testDispatcher) {
+    viewModel.toggleCustomTagField(0)
+    advanceUntilIdle()
+
+    coVerify {
+      settingsManager.setCustomTagFields(
+        match { list ->
+          list[0].tag == "Energy" && !list[0].isEnabled
+        }
+      )
+    }
+  }
 }

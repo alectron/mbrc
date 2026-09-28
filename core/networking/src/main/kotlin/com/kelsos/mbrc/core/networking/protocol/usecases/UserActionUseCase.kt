@@ -6,6 +6,7 @@ import com.kelsos.mbrc.core.networking.client.SocketMessage
 import com.kelsos.mbrc.core.networking.protocol.actions.UserAction
 import com.kelsos.mbrc.core.networking.protocol.base.Protocol
 import com.kelsos.mbrc.core.networking.protocol.payloads.NowPlayingMoveRequest
+import com.kelsos.mbrc.core.networking.protocol.payloads.TagChangeRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
@@ -18,6 +19,10 @@ interface UserActionUseCase {
 
 suspend fun UserActionUseCase.performUserAction(protocol: Protocol, data: Any) {
   perform(UserAction.create(protocol, data))
+}
+
+suspend fun UserActionUseCase.setTrackTag(tag: String, value: String) {
+  perform(UserAction(Protocol.NowPlayingTagChange, TagChangeRequest(tag, value)))
 }
 
 suspend fun UserActionUseCase.moveTrack(request: NowPlayingMoveRequest) {

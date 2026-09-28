@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.kelsos.mbrc.core.common.settings.CustomTagFieldConfig
 
 object SettingsDataStore {
   private const val SETTINGS_NAME = "settings"
@@ -68,6 +69,7 @@ object SettingsDataStore {
     val HALF_STAR_RATING = booleanPreferencesKey("mbrc.settings.half_star_rating")
     val SHOW_RATING_ON_PLAYER = booleanPreferencesKey("mbrc.settings.show_rating_on_player")
     val KEEP_SCREEN_ON = stringPreferencesKey("mbrc.settings.keep_screen_on_mode")
+    val CUSTOM_TAG_FIELDS = stringPreferencesKey("mbrc.settings.custom_tag_fields")
 
     // Library sorting preferences
     val GENRE_SORT = stringPreferencesKey("mbrc.library.sort.genre")
@@ -92,6 +94,7 @@ object SettingsDataStore {
     const val HALF_STAR_RATING = true
     const val SHOW_RATING_ON_PLAYER = false
     const val KEEP_SCREEN_ON = KeepScreenOn.NEVER
+    val CUSTOM_TAG_FIELDS = CustomTagFieldConfig.encodeList(CustomTagFieldConfig.DEFAULT_TAGS)
 
     // Library sorting defaults (format: "field:order")
     const val GENRE_SORT = "name:asc"
