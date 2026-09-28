@@ -28,4 +28,5 @@ val testDatabaseModule =
     single { get<Database>().playlistDao() }
     single { get<Database>().radioStationDao() }
     single { get<Database>().connectionDao() }
+    single { get<Database>().customTagSuggestionDao() }
   }

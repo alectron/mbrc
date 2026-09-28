@@ -8,6 +8,8 @@ import com.kelsos.mbrc.feature.playback.nowplaying.NowPlayingRepositoryImpl
 import com.kelsos.mbrc.feature.playback.nowplaying.NowPlayingViewModel
 import com.kelsos.mbrc.feature.playback.player.PlayerViewModel
 import com.kelsos.mbrc.feature.playback.player.RatingDialogViewModel
+import com.kelsos.mbrc.feature.playback.player.RecentTagsStore
+import com.kelsos.mbrc.feature.playback.player.RecentTagsStoreImpl
 import org.koin.core.module.dsl.bind
 import org.koin.core.module.dsl.singleOf
 import org.koin.core.module.dsl.viewModelOf
@@ -22,6 +24,7 @@ import org.koin.dsl.module
  * - Lyrics ViewModel
  * - Rating dialog ViewModel
  * - Move manager for now playing list reordering
+ * - Recent tags store for LRU tag tracking
  *
  * Required dependencies from other modules:
  * - NowPlayingDao from core/data module
@@ -35,6 +38,9 @@ val playbackModule = module {
 
   // MoveManager is singleton to track moves across recompositions
   singleOf(::MoveManagerImpl) { bind<MoveManager>() }
+
+  // Tag stores
+  singleOf(::RecentTagsStoreImpl) { bind<RecentTagsStore>() }
 
   // ViewModels
   viewModelOf(::PlayerViewModel)

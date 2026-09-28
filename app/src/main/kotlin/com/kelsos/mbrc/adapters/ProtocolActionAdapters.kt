@@ -90,6 +90,19 @@ class TrackChangeNotifierImpl(
       }
     }
   }
+
+  override suspend fun requestPlaybackPosition() {
+    withContext(dispatchers.network) {
+      runCatching {
+        val position = playbackApi.getPlaybackPosition()
+        appState.updatePlayingPosition(
+          com.kelsos.mbrc.core.common.state.PlayingPosition(position.current, position.total)
+        )
+      }.onFailure { e ->
+        Timber.v(e, "Failed to fetch playback position")
+      }
+    }
+  }
 }
 
 /**

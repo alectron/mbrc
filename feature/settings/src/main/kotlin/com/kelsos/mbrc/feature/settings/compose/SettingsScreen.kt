@@ -61,6 +61,7 @@ import com.kelsos.mbrc.core.ui.layout.ReadableContent
 import com.kelsos.mbrc.feature.settings.R
 import com.kelsos.mbrc.feature.settings.SettingsDialogType
 import com.kelsos.mbrc.feature.settings.SettingsViewModel
+import com.kelsos.mbrc.feature.settings.TagSyncState
 import com.kelsos.mbrc.feature.settings.data.CallAction
 import com.kelsos.mbrc.feature.settings.data.KeepScreenOn
 import com.kelsos.mbrc.feature.settings.theme.Theme
@@ -94,6 +95,8 @@ data class SettingsContentState(
   val halfStarRatingEnabled: Boolean = true,
   val showRatingOnPlayerEnabled: Boolean = false,
   val customTagFields: List<CustomTagFieldConfig> = CustomTagFieldConfig.DEFAULT_TAGS,
+  val tagSuggestionLimit: Int = 8,
+  val tagSyncState: TagSyncState = TagSyncState.Idle,
   val visibleDialog: SettingsDialogType? = null
 )
 
@@ -118,6 +121,9 @@ interface ISettingsActions {
   val onCustomTagFieldAdded: (String, Boolean) -> Unit get() = { _, _ -> }
   val onCustomTagFieldRemoved: (Int) -> Unit get() = {}
   val onCustomTagFieldToggled: (Int) -> Unit get() = {}
+  val onSyncTagsClick: () -> Unit get() = {}
+  val onSuggestionLimitClick: () -> Unit get() = {}
+  val onSuggestionLimitSelected: (Int) -> Unit get() = {}
   val onNavigateToLicenses: () -> Unit
   val onNavigateToAppLicense: () -> Unit
   val onDismissDialog: () -> Unit
@@ -143,6 +149,9 @@ object EmptySettingsActions : ISettingsActions {
   override val onCustomTagFieldAdded: (String, Boolean) -> Unit = { _, _ -> }
   override val onCustomTagFieldRemoved: (Int) -> Unit = {}
   override val onCustomTagFieldToggled: (Int) -> Unit = {}
+  override val onSyncTagsClick: () -> Unit = {}
+  override val onSuggestionLimitClick: () -> Unit = {}
+  override val onSuggestionLimitSelected: (Int) -> Unit = {}
   override val onNavigateToLicenses: () -> Unit = {}
   override val onNavigateToAppLicense: () -> Unit = {}
   override val onDismissDialog: () -> Unit = {}
@@ -509,9 +518,13 @@ fun SettingsScreenContent(
       // Custom Tag Fields Section
       CustomTagsContentSection(
         customTagFields = state.customTagFields,
+        tagSuggestionLimit = state.tagSuggestionLimit,
+        tagSyncState = state.tagSyncState,
         onAddTagClick = actions.onAddCustomTagFieldClick,
         onToggleTag = actions.onCustomTagFieldToggled,
-        onRemoveTag = actions.onCustomTagFieldRemoved
+        onRemoveTag = actions.onCustomTagFieldRemoved,
+        onSyncTagsClick = actions.onSyncTagsClick,
+        onSuggestionLimitClick = actions.onSuggestionLimitClick
       )
 
       SettingsDivider()
@@ -574,6 +587,15 @@ fun SettingsScreenContent(
     SettingsDialogType.AddCustomTagField -> AddCustomTagFieldDialog(
       onTagAdded = { name, isMulti ->
         actions.onCustomTagFieldAdded(name, isMulti)
+        actions.onDismissDialog()
+      },
+      onDismiss = actions.onDismissDialog
+    )
+
+    SettingsDialogType.TagSuggestionLimit -> TagSuggestionLimitDialog(
+      currentLimit = state.tagSuggestionLimit,
+      onLimitSelected = { limit ->
+        actions.onSuggestionLimitSelected(limit)
         actions.onDismissDialog()
       },
       onDismiss = actions.onDismissDialog
@@ -676,19 +698,36 @@ private fun RatingContentSection(
 @Composable
 private fun CustomTagsSettingsSection(viewModel: SettingsViewModel) {
   val customTagFields by viewModel.customTagFields.collectAsStateWithLifecycle()
+  val tagSuggestionLimit by viewModel.tagSuggestionLimit.collectAsStateWithLifecycle()
+  val tagSyncState by viewModel.tagSyncState.collectAsStateWithLifecycle()
   val visibleDialog by viewModel.visibleDialog.collectAsStateWithLifecycle()
 
   CustomTagsContentSection(
     customTagFields = customTagFields,
+    tagSuggestionLimit = tagSuggestionLimit,
+    tagSyncState = tagSyncState,
     onAddTagClick = { viewModel.showDialog(SettingsDialogType.AddCustomTagField) },
     onToggleTag = { index -> viewModel.toggleCustomTagField(index) },
-    onRemoveTag = { index -> viewModel.removeCustomTagField(index) }
+    onRemoveTag = { index -> viewModel.removeCustomTagField(index) },
+    onSyncTagsClick = { viewModel.syncTagMetadata() },
+    onSuggestionLimitClick = { viewModel.showDialog(SettingsDialogType.TagSuggestionLimit) }
   )
 
   if (visibleDialog == SettingsDialogType.AddCustomTagField) {
     AddCustomTagFieldDialog(
       onTagAdded = { name, isMulti ->
         viewModel.addCustomTagField(name, isMulti)
+        viewModel.hideDialog()
+      },
+      onDismiss = { viewModel.hideDialog() }
+    )
+  }
+
+  if (visibleDialog == SettingsDialogType.TagSuggestionLimit) {
+    TagSuggestionLimitDialog(
+      currentLimit = tagSuggestionLimit,
+      onLimitSelected = { limit ->
+        viewModel.setTagSuggestionLimit(limit)
         viewModel.hideDialog()
       },
       onDismiss = { viewModel.hideDialog() }
@@ -702,9 +741,13 @@ private fun CustomTagsSettingsSection(viewModel: SettingsViewModel) {
 @Composable
 internal fun CustomTagsContentSection(
   customTagFields: List<CustomTagFieldConfig>,
+  tagSuggestionLimit: Int = 8,
+  tagSyncState: TagSyncState = TagSyncState.Idle,
   onAddTagClick: () -> Unit,
   onToggleTag: (Int) -> Unit,
-  onRemoveTag: (Int) -> Unit
+  onRemoveTag: (Int) -> Unit,
+  onSyncTagsClick: () -> Unit = {},
+  onSuggestionLimitClick: () -> Unit = {}
 ) {
   SettingsSection(title = stringResource(R.string.settings_custom_tag_fields)) {
     if (customTagFields.isEmpty()) {
@@ -729,7 +772,47 @@ internal fun CustomTagsContentSection(
       subtitle = stringResource(R.string.settings_custom_tag_fields_summary),
       onClick = onAddTagClick
     )
+
+    val syncSubtitle = when (tagSyncState) {
+      is TagSyncState.Syncing -> stringResource(R.string.settings_custom_tags_resync_syncing)
+      is TagSyncState.Success -> stringResource(R.string.settings_custom_tags_resync_success, tagSyncState.count)
+      is TagSyncState.Error -> stringResource(R.string.settings_custom_tags_resync_failed, tagSyncState.message)
+      is TagSyncState.Idle -> stringResource(R.string.settings_custom_tags_resync_summary)
+    }
+
+    SettingsItem(
+      title = stringResource(R.string.settings_custom_tags_resync),
+      subtitle = syncSubtitle,
+      onClick = {
+        if (tagSyncState !is TagSyncState.Syncing) {
+          onSyncTagsClick()
+        }
+      }
+    )
+
+    SettingsItem(
+      title = stringResource(R.string.settings_custom_tags_suggestion_limit),
+      subtitle = stringResource(R.string.settings_custom_tags_suggestion_limit_summary, tagSuggestionLimit),
+      onClick = onSuggestionLimitClick
+    )
   }
+}
+
+@Composable
+private fun TagSuggestionLimitDialog(
+  currentLimit: Int,
+  onLimitSelected: (Int) -> Unit,
+  onDismiss: () -> Unit
+) {
+  val options = arrayOf("8", "12", "16", "24")
+  RadioSelectionDialog(
+    title = stringResource(R.string.settings_custom_tags_suggestion_limit),
+    values = options,
+    labels = options.map { "$it suggestions" }.toTypedArray(),
+    currentValue = currentLimit.toString(),
+    onValueSelected = { value -> onLimitSelected(value.toIntOrNull() ?: 8) },
+    onDismiss = onDismiss
+  )
 }
 
 @Composable

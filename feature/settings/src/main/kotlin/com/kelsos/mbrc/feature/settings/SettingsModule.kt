@@ -9,6 +9,8 @@ import com.kelsos.mbrc.feature.settings.domain.ConnectionRepository
 import com.kelsos.mbrc.feature.settings.domain.ConnectionRepositoryImpl
 import com.kelsos.mbrc.feature.settings.domain.PluginUpdateCheckUseCase
 import com.kelsos.mbrc.feature.settings.domain.PluginUpdateCheckUseCaseImpl
+import com.kelsos.mbrc.feature.settings.domain.TagMetadataSyncUseCase
+import com.kelsos.mbrc.feature.settings.domain.TagMetadataSyncUseCaseImpl
 import com.kelsos.mbrc.feature.settings.domain.SettingsManager
 import com.kelsos.mbrc.feature.settings.theme.ThemeManager
 import com.kelsos.mbrc.feature.settings.theme.ThemeManagerImpl
@@ -51,6 +53,7 @@ val settingsModule = module {
 
   // Use cases
   singleOf(::PluginUpdateCheckUseCaseImpl) { bind<PluginUpdateCheckUseCase>() }
+  singleOf(::TagMetadataSyncUseCaseImpl) { bind<TagMetadataSyncUseCase>() }
 
   // ViewModels
   singleOf(::ConnectionManagerViewModel)

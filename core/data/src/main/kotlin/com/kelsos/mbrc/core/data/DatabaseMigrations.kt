@@ -429,3 +429,21 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
     db.execSQL("CREATE INDEX now_playing_date_added_idx ON now_playing (date_added)")
   }
 }
+
+val MIGRATION_4_5 = object : Migration(4, 5) {
+  override fun migrate(db: SupportSQLiteDatabase) {
+    db.execSQL(
+      """
+      CREATE TABLE IF NOT EXISTS `custom_tag_suggestions` (
+        `tag` TEXT NOT NULL,
+        `value` TEXT NOT NULL,
+        `date_added` INTEGER NOT NULL,
+        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL
+      )
+      """.trimIndent()
+    )
+    db.execSQL(
+      "CREATE UNIQUE INDEX IF NOT EXISTS `custom_tag_suggestions_tag_value_idx` ON `custom_tag_suggestions` (`tag`, `value`)"
+    )
+  }
+}

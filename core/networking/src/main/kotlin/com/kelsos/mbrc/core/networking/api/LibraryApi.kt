@@ -5,6 +5,7 @@ import com.kelsos.mbrc.core.networking.client.ResponseWithPayload
 import com.kelsos.mbrc.core.networking.dto.AlbumCoverDto
 import com.kelsos.mbrc.core.networking.dto.AlbumDto
 import com.kelsos.mbrc.core.networking.dto.ArtistDto
+import com.kelsos.mbrc.core.networking.dto.BrowseTagValuesResponse
 import com.kelsos.mbrc.core.networking.dto.CoverDto
 import com.kelsos.mbrc.core.networking.dto.GenreDto
 import com.kelsos.mbrc.core.networking.dto.TrackDto
@@ -23,4 +24,6 @@ interface LibraryApi {
     covers: List<AlbumCoverDto>,
     progress: Progress?
   ): Flow<ResponseWithPayload<AlbumCoverDto, CoverDto>>
+
+  suspend fun browseTagValues(tags: List<String>): BrowseTagValuesResponse
 }

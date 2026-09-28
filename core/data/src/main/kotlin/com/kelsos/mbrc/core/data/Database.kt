@@ -19,6 +19,8 @@ import com.kelsos.mbrc.core.data.radio.RadioStationDao
 import com.kelsos.mbrc.core.data.radio.RadioStationEntity
 import com.kelsos.mbrc.core.data.settings.ConnectionDao
 import com.kelsos.mbrc.core.data.settings.ConnectionSettingsEntity
+import com.kelsos.mbrc.core.data.tags.CustomTagSuggestionDao
+import com.kelsos.mbrc.core.data.tags.CustomTagSuggestionEntity
 
 @Database(
   entities = [
@@ -29,7 +31,8 @@ import com.kelsos.mbrc.core.data.settings.ConnectionSettingsEntity
     NowPlayingEntity::class,
     PlaylistEntity::class,
     RadioStationEntity::class,
-    ConnectionSettingsEntity::class
+    ConnectionSettingsEntity::class,
+    CustomTagSuggestionEntity::class
   ],
   version = VERSION
 )
@@ -50,8 +53,10 @@ abstract class Database : RoomDatabase() {
 
   abstract fun connectionDao(): ConnectionDao
 
+  abstract fun customTagSuggestionDao(): CustomTagSuggestionDao
+
   companion object {
-    const val VERSION = 4
+    const val VERSION = 5
     const val NAME = "cache.db"
   }
 }

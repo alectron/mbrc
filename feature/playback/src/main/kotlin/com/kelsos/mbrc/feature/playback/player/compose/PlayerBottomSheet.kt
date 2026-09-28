@@ -30,10 +30,12 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
+import androidx.compose.material3.InputChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SuggestionChip
+import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -68,12 +70,14 @@ fun PlayerBottomSheet(
   onBanClick: () -> Unit,
   viewModel: RatingDialogViewModel = koinViewModel()
 ) {
-  val sheetState = rememberModalBottomSheetState()
+  val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
   val rating by viewModel.rating.collectAsStateWithLifecycle(initialValue = null)
   val halfStarEnabled by viewModel.halfStarEnabled.collectAsStateWithLifecycle()
   val customTagFields by viewModel.customTagFields.collectAsStateWithLifecycle()
   val trackDetails by viewModel.trackDetails.collectAsStateWithLifecycle()
   val genreSuggestions by viewModel.genreSuggestions.collectAsStateWithLifecycle()
+  val confirmedTags by viewModel.confirmedTags.collectAsStateWithLifecycle()
+  val tagSuggestionLimit by viewModel.tagSuggestionLimit.collectAsStateWithLifecycle()
 
   ModalBottomSheet(
     onDismissRequest = onDismiss,
@@ -254,11 +258,15 @@ fun PlayerBottomSheet(
         )
 
         customTagFields.forEach { config ->
+          val tagSuggestions = remember(config.tag, trackDetails, tagSuggestionLimit, confirmedTags) {
+            viewModel.getSuggestionsForTag(config.tag)
+          }
           CustomTagFieldRow(
             config = config,
             currentValue = trackDetails.getTagValue(config.tag),
             onValueChange = { newValue -> viewModel.changeTag(config.tag, newValue) },
-            suggestions = if (config.tag.equals("genre", ignoreCase = true)) genreSuggestions else emptyList()
+            suggestions = tagSuggestions,
+            isTagConfirmed = { tag, value -> viewModel.isTagConfirmed(tag, value) }
           )
           Spacer(modifier = Modifier.height(12.dp))
         }
@@ -273,7 +281,8 @@ private fun CustomTagFieldRow(
   config: CustomTagFieldConfig,
   currentValue: String,
   onValueChange: (String) -> Unit,
-  suggestions: List<String>
+  suggestions: List<String>,
+  isTagConfirmed: (String, String) -> Boolean
 ) {
   var showAddDialog by remember { mutableStateOf(false) }
   var showEditDialog by remember { mutableStateOf(false) }
@@ -301,10 +310,32 @@ private fun CustomTagFieldRow(
         modifier = Modifier.fillMaxWidth()
       ) {
         values.forEach { tagItem ->
+          val isConfirmed = isTagConfirmed(config.tag, tagItem)
           InputChip(
             selected = true,
             onClick = { /* keep selected */ },
             label = { Text(tagItem) },
+            colors = InputChipDefaults.inputChipColors(
+              selectedContainerColor = if (isConfirmed) {
+                MaterialTheme.colorScheme.primaryContainer
+              } else {
+                MaterialTheme.colorScheme.surfaceVariant
+              },
+              selectedLabelColor = if (isConfirmed) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+              } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+              }
+            ),
+            border = if (isConfirmed) {
+              null
+            } else {
+              InputChipDefaults.inputChipBorder(
+                enabled = true,
+                selected = true,
+                borderColor = MaterialTheme.colorScheme.outline
+              )
+            },
             trailingIcon = {
               Icon(
                 imageVector = Icons.Default.Clear,
@@ -337,6 +368,7 @@ private fun CustomTagFieldRow(
         AddTagValueDialog(
           tagName = config.tag,
           suggestions = suggestions,
+          isTagConfirmed = isTagConfirmed,
           onAdd = { newTag ->
             val updated = (values + newTag).distinct()
             onValueChange(updated.joinToString("; "))
@@ -428,13 +460,14 @@ private fun CustomTagFieldRow(
 private fun AddTagValueDialog(
   tagName: String,
   suggestions: List<String>,
+  isTagConfirmed: (String, String) -> Boolean,
   onAdd: (String) -> Unit,
   onDismiss: () -> Unit
 ) {
   var text by remember { mutableStateOf("") }
   val filteredSuggestions = remember(text, suggestions) {
-    if (text.isBlank()) suggestions.take(8)
-    else suggestions.filter { it.contains(text, ignoreCase = true) }.take(8)
+    if (text.isBlank()) suggestions
+    else suggestions.filter { it.contains(text, ignoreCase = true) }
   }
 
   AlertDialog(
@@ -464,9 +497,30 @@ private fun AddTagValueDialog(
             modifier = Modifier.fillMaxWidth()
           ) {
             filteredSuggestions.forEach { suggestion ->
+              val isConfirmed = isTagConfirmed(tagName, suggestion)
               SuggestionChip(
                 onClick = { onAdd(suggestion) },
-                label = { Text(suggestion) }
+                label = { Text(suggestion) },
+                colors = SuggestionChipDefaults.suggestionChipColors(
+                  containerColor = if (isConfirmed) {
+                    MaterialTheme.colorScheme.primaryContainer
+                  } else {
+                    MaterialTheme.colorScheme.surfaceVariant
+                  },
+                  labelColor = if (isConfirmed) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                  } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                  }
+                ),
+                border = if (isConfirmed) {
+                  null
+                } else {
+                  SuggestionChipDefaults.suggestionChipBorder(
+                    enabled = true,
+                    borderColor = MaterialTheme.colorScheme.outline
+                  )
+                }
               )
             }
           }

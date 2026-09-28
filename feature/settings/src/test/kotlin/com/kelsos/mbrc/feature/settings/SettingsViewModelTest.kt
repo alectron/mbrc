@@ -63,6 +63,7 @@ class SettingsViewModelTest : KoinTest {
       every { halfStarRatingFlow } returns this@SettingsViewModelTest.halfStarRatingFlow
       every { showRatingOnPlayerFlow } returns this@SettingsViewModelTest.showRatingOnPlayerFlow
       every { customTagFieldsFlow } returns this@SettingsViewModelTest.customTagFieldsFlow
+      every { tagSuggestionLimitFlow } returns MutableStateFlow(8)
     }
     serviceRestarter = mockk(relaxed = true)
 
@@ -379,4 +380,13 @@ class SettingsViewModelTest : KoinTest {
       )
     }
   }
+
+  @Test
+  fun `setTagSuggestionLimit should call settingsManager setTagSuggestionLimit`() = runTest(testDispatcher) {
+    viewModel.setTagSuggestionLimit(16)
+    advanceUntilIdle()
+
+    coVerify { settingsManager.setTagSuggestionLimit(16) }
+  }
 }
+

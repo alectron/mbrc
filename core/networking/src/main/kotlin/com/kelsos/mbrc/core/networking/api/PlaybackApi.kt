@@ -4,6 +4,7 @@ import com.kelsos.mbrc.core.common.data.Progress
 import com.kelsos.mbrc.core.networking.dto.NowPlayingDto
 import com.kelsos.mbrc.core.networking.protocol.payloads.CoverPayload
 import com.kelsos.mbrc.core.networking.protocol.payloads.NowPlayingDetailsPayload
+import com.kelsos.mbrc.core.networking.protocol.models.Position
 import kotlinx.coroutines.flow.Flow
 
 interface PlaybackApi {
@@ -12,4 +13,6 @@ interface PlaybackApi {
   suspend fun getCover(): CoverPayload
 
   suspend fun getTrackDetails(): NowPlayingDetailsPayload
+
+  suspend fun getPlaybackPosition(): Position
 }

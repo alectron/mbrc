@@ -6,6 +6,7 @@ import com.kelsos.mbrc.core.common.settings.CustomTagFieldConfig
 import com.kelsos.mbrc.core.common.state.AppStateFlow
 import com.kelsos.mbrc.core.common.state.TrackDetails
 import com.kelsos.mbrc.core.data.library.genre.GenreDao
+import com.kelsos.mbrc.core.data.tags.CustomTagSuggestionDao
 import com.kelsos.mbrc.core.networking.protocol.actions.UserAction
 import com.kelsos.mbrc.core.networking.protocol.base.Protocol
 import com.kelsos.mbrc.core.networking.protocol.usecases.UserActionUseCase
@@ -29,7 +30,9 @@ class RatingDialogViewModel(
   private val userActionUseCase: UserActionUseCase,
   private val appState: AppStateFlow,
   private val settingsManager: SettingsManager,
-  private val genreDao: GenreDao? = null
+  private val genreDao: GenreDao? = null,
+  private val suggestionDao: CustomTagSuggestionDao? = null,
+  private val recentTagsStore: RecentTagsStore? = null
 ) : ViewModel() {
   private val _rating: MutableStateFlow<Float?> = MutableStateFlow(null)
   val rating: Flow<Float?> get() = _rating
@@ -40,6 +43,12 @@ class RatingDialogViewModel(
   val customTagFields: StateFlow<List<CustomTagFieldConfig>> = settingsManager.customTagFieldsFlow
     .map { list -> list.filter { it.isEnabled } }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), CustomTagFieldConfig.DEFAULT_TAGS)
+
+  val tagSuggestionLimit: StateFlow<Int> = settingsManager.tagSuggestionLimitFlow
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 8)
+
+  private val _confirmedTags = MutableStateFlow<Set<String>>(emptySet())
+  val confirmedTags: StateFlow<Set<String>> = _confirmedTags.asStateFlow()
 
   private val _optimisticTags = MutableStateFlow<Map<String, String>>(emptyMap())
   private val _trackDetails = MutableStateFlow(appState.playingTrackDetails.value)
@@ -76,14 +85,77 @@ class RatingDialogViewModel(
       userActionUseCase.perform(UserAction.create(Protocol.NowPlayingDetails))
     }
     viewModelScope.launch(Dispatchers.IO) {
-      try {
-        genreDao?.genres()?.map { it.genre }?.let { list ->
-          _genreSuggestions.emit(list.filter { it.isNotBlank() })
+      loadConfirmedTags()
+      _genreSuggestions.value = getSuggestionsForTag("genre")
+    }
+  }
+
+  private fun loadConfirmedTags() {
+    try {
+      val set = mutableSetOf<String>()
+      suggestionDao?.getAllConfirmedTagValues()?.let { set.addAll(it) }
+      genreDao?.genres()?.forEach {
+        if (it.genre.isNotBlank()) {
+          set.add("genre:${it.genre.trim().lowercase()}")
         }
-      } catch (_: Exception) {
-        // Ignored if DB not initialized or in unit tests
+      }
+      _confirmedTags.value = set
+    } catch (_: Exception) {
+      // Ignored if DB not initialized or in unit tests
+    }
+  }
+
+  /**
+   * Returns merged suggestions for the given tag:
+   * 1. LRU recent tags first
+   * 2. Followed by alphabetical suggestions from SQLite
+   * Capped to the user-configured limit.
+   */
+  fun getSuggestionsForTag(tag: String): List<String> {
+    val normalizedTag = tag.trim().lowercase()
+    val limit = tagSuggestionLimit.value
+
+    val recent = recentTagsStore?.getRecentTags(normalizedTag) ?: emptyList()
+
+    val fromDb = try {
+      val list = mutableListOf<String>()
+      suggestionDao?.getSuggestionsForTag(normalizedTag)?.let { list.addAll(it) }
+      if (normalizedTag == "genre") {
+        genreDao?.genres()?.map { it.genre }?.let { list.addAll(it) }
+      }
+      list.filter { it.isNotBlank() }.distinct()
+    } catch (_: Exception) {
+      emptyList()
+    }
+
+    val result = mutableListOf<String>()
+    val seen = mutableSetOf<String>()
+
+    for (item in recent) {
+      val lower = item.lowercase()
+      if (seen.add(lower)) {
+        result.add(item)
+        if (result.size >= limit) return result
       }
     }
+
+    for (item in fromDb) {
+      val lower = item.lowercase()
+      if (seen.add(lower)) {
+        result.add(item)
+        if (result.size >= limit) break
+      }
+    }
+
+    return result
+  }
+
+  /**
+   * Checks whether a tag value is confirmed in MusicBee / SQLite cache.
+   */
+  fun isTagConfirmed(tag: String, value: String): Boolean {
+    val key = "${tag.trim()}:${value.trim()}".lowercase()
+    return _confirmedTags.value.contains(key)
   }
 
   /**
@@ -106,6 +178,12 @@ class RatingDialogViewModel(
     _optimisticTags.update { it + (tagName to value) }
     _trackDetails.value = _trackDetails.value.withTagValue(tagName, value)
     viewModelScope.launch {
+      value.split(";").forEach { piece ->
+        val trimmed = piece.trim()
+        if (trimmed.isNotBlank()) {
+          recentTagsStore?.recordTagUsed(tagName, trimmed)
+        }
+      }
       userActionUseCase.setTrackTag(tagName, value)
     }
   }

@@ -6,6 +6,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.SharedPreferencesMigration
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -70,6 +71,7 @@ object SettingsDataStore {
     val SHOW_RATING_ON_PLAYER = booleanPreferencesKey("mbrc.settings.show_rating_on_player")
     val KEEP_SCREEN_ON = stringPreferencesKey("mbrc.settings.keep_screen_on_mode")
     val CUSTOM_TAG_FIELDS = stringPreferencesKey("mbrc.settings.custom_tag_fields")
+    val TAG_SUGGESTION_LIMIT = intPreferencesKey("mbrc.settings.tag_suggestion_limit")
 
     // Library sorting preferences
     val GENRE_SORT = stringPreferencesKey("mbrc.library.sort.genre")
@@ -95,6 +97,7 @@ object SettingsDataStore {
     const val SHOW_RATING_ON_PLAYER = false
     const val KEEP_SCREEN_ON = KeepScreenOn.NEVER
     val CUSTOM_TAG_FIELDS = CustomTagFieldConfig.encodeList(CustomTagFieldConfig.DEFAULT_TAGS)
+    const val TAG_SUGGESTION_LIMIT = 8
 
     // Library sorting defaults (format: "field:order")
     const val GENRE_SORT = "name:asc"

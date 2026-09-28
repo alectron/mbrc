@@ -32,6 +32,7 @@ interface PlayerStateHandler {
 interface TrackChangeNotifier {
   suspend fun persistTrackInfo(track: TrackInfo)
   suspend fun requestTrackDetails()
+  suspend fun requestPlaybackPosition()
 }
 
 /**

@@ -71,6 +71,12 @@ class AppStateManager(
       appState.playingTrack.collect { playingTrack ->
         notifications.updatePlayingTrack(playingTrack)
         trackCache.persistInfo(playingTrack)
+        val playerState = appState.playerStatus.map { it.state }.first()
+        if (playerState == PlayerState.Playing) {
+          startPositionUpdater()
+        } else {
+          stopPositionUpdater()
+        }
       }
     }
 

@@ -144,6 +144,10 @@ class SettingsManagerDataStore(
     CustomTagFieldConfig.decodeList(encoded)
   }
 
+  override val tagSuggestionLimitFlow: Flow<Int> = dataStore.data.map { preferences ->
+    preferences[PreferenceKeys.TAG_SUGGESTION_LIMIT] ?: DefaultValues.TAG_SUGGESTION_LIMIT
+  }
+
   override val genreSortPreferenceFlow: Flow<GenreSortPreference> = dataStore.data.map { prefs ->
     val encoded = prefs[PreferenceKeys.GENRE_SORT] ?: DefaultValues.GENRE_SORT
     SortPreference.decode(encoded, GenreSortField::fromString, GenreSortField.NAME)
@@ -238,6 +242,12 @@ class SettingsManagerDataStore(
   override suspend fun setCustomTagFields(fields: List<CustomTagFieldConfig>) {
     dataStore.edit { preferences ->
       preferences[PreferenceKeys.CUSTOM_TAG_FIELDS] = CustomTagFieldConfig.encodeList(fields)
+    }
+  }
+
+  override suspend fun setTagSuggestionLimit(limit: Int) {
+    dataStore.edit { preferences ->
+      preferences[PreferenceKeys.TAG_SUGGESTION_LIMIT] = limit
     }
   }
 

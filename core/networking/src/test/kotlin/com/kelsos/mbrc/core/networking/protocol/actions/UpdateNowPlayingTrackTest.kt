@@ -90,6 +90,7 @@ class UpdateNowPlayingTrackTest {
     val published = written.single()
     coVerify { notifier.persistTrackInfo(published) }
     coVerify { notifier.requestTrackDetails() }
+    coVerify { notifier.requestPlaybackPosition() }
   }
 
   @Test(expected = JsonDataException::class)

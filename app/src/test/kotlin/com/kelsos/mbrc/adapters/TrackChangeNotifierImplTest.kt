@@ -9,6 +9,8 @@ import com.kelsos.mbrc.core.networking.api.PlaybackApi
 import com.kelsos.mbrc.core.networking.protocol.payloads.NowPlayingDetailsPayload
 import com.kelsos.mbrc.core.platform.state.PlayingTrack
 import com.kelsos.mbrc.state.PlayingTrackCache
+import com.kelsos.mbrc.core.common.state.PlayingPosition
+import com.kelsos.mbrc.core.networking.protocol.models.Position
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -82,5 +84,26 @@ class TrackChangeNotifierImplTest {
     notifier.requestTrackDetails()
 
     verify(exactly = 0) { appState.updateTrackDetails(any()) }
+  }
+
+  @Test
+  fun `requested playback position is published to the app state`() = runTest {
+    coEvery { playbackApi.getPlaybackPosition() } returns Position(current = 50, total = 200)
+    val published = mutableListOf<PlayingPosition>()
+    every { appState.updatePlayingPosition(any()) } answers { published.add(firstArg()) }
+
+    notifier.requestPlaybackPosition()
+
+    assertThat(published.single().current).isEqualTo(50)
+    assertThat(published.single().total).isEqualTo(200)
+  }
+
+  @Test
+  fun `a failed playback position request is swallowed and publishes nothing`() = runTest {
+    coEvery { playbackApi.getPlaybackPosition() } throws RuntimeException("boom")
+
+    notifier.requestPlaybackPosition()
+
+    verify(exactly = 0) { appState.updatePlayingPosition(any()) }
   }
 }

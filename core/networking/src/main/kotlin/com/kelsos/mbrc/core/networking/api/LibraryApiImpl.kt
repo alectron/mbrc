@@ -6,6 +6,8 @@ import com.kelsos.mbrc.core.networking.client.ResponseWithPayload
 import com.kelsos.mbrc.core.networking.dto.AlbumCoverDto
 import com.kelsos.mbrc.core.networking.dto.AlbumDto
 import com.kelsos.mbrc.core.networking.dto.ArtistDto
+import com.kelsos.mbrc.core.networking.dto.BrowseTagValuesRequest
+import com.kelsos.mbrc.core.networking.dto.BrowseTagValuesResponse
 import com.kelsos.mbrc.core.networking.dto.CoverDto
 import com.kelsos.mbrc.core.networking.dto.GenreDto
 import com.kelsos.mbrc.core.networking.dto.TrackDto
@@ -30,4 +32,11 @@ class LibraryApiImpl(private val apiBase: ApiBase) : LibraryApi {
     progress: Progress?
   ): Flow<ResponseWithPayload<AlbumCoverDto, CoverDto>> =
     apiBase.getAll(Protocol.LibraryCover, covers, CoverDto::class, progress)
+
+  override suspend fun browseTagValues(tags: List<String>): BrowseTagValuesResponse =
+    apiBase.getItem(
+      Protocol.BrowseTagValues,
+      BrowseTagValuesResponse::class,
+      BrowseTagValuesRequest(tags)
+    )
 }

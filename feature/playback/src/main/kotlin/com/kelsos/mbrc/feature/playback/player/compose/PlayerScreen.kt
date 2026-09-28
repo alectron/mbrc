@@ -1002,7 +1002,7 @@ private fun ProgressSection(
 
   val isStream = position.isStream
   val totalMs = position.total.toFloat().coerceAtLeast(1f)
-  val currentNormalized = if (isStream) 0f else position.current.toFloat() / totalMs
+  val currentNormalized = if (isStream) 0f else (position.current.toFloat() / totalMs).coerceIn(0f, 1f)
 
   LaunchedEffect(position.current) {
     if (!isUserSeeking && !ignoreServerUpdates && !isStream) {

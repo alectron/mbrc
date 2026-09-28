@@ -54,19 +54,28 @@ class RatingDialogViewModelTest : KoinTest {
     single<SettingsManager> {
       mockk(relaxed = true) {
         every { halfStarRatingFlow } returns this@RatingDialogViewModelTest.halfStarRatingFlow
+        every { tagSuggestionLimitFlow } returns MutableStateFlow(8)
       }
     }
+    single<com.kelsos.mbrc.core.data.library.genre.GenreDao> { mockk(relaxed = true) }
+    single<com.kelsos.mbrc.core.data.tags.CustomTagSuggestionDao> { mockk(relaxed = true) }
+    single<RecentTagsStore> { mockk(relaxed = true) }
     single {
       RatingDialogViewModel(
         userActionUseCase = get(),
         appState = get(),
-        settingsManager = get()
+        settingsManager = get(),
+        genreDao = get(),
+        suggestionDao = get(),
+        recentTagsStore = get()
       )
     }
   }
 
   private val viewModel: RatingDialogViewModel by inject()
   private val userActionUseCase: UserActionUseCase by inject()
+  private val suggestionDao: com.kelsos.mbrc.core.data.tags.CustomTagSuggestionDao by inject()
+  private val recentTagsStore: RecentTagsStore by inject()
 
   @Before
   fun setUp() {
@@ -223,6 +232,7 @@ class RatingDialogViewModelTest : KoinTest {
     }
     val mockSettingsManager: SettingsManager = mockk(relaxed = true) {
       every { halfStarRatingFlow } returns MutableStateFlow(false)
+      every { tagSuggestionLimitFlow } returns MutableStateFlow(8)
     }
 
     // Create ViewModel - this triggers init block
@@ -265,6 +275,7 @@ class RatingDialogViewModelTest : KoinTest {
     val mockSettingsManager: SettingsManager = mockk(relaxed = true) {
       every { halfStarRatingFlow } returns MutableStateFlow(false)
       every { customTagFieldsFlow } returns MutableStateFlow(emptyList())
+      every { tagSuggestionLimitFlow } returns MutableStateFlow(8)
     }
 
     RatingDialogViewModel(mockUserActionUseCase, mockAppState, mockSettingsManager)
@@ -290,5 +301,36 @@ class RatingDialogViewModelTest : KoinTest {
       val updated = awaitItem()
       assertThat(updated.getTagValue("Energy")).isEqualTo("8")
     }
+  }
+
+  @Test
+  fun `changeTag should record tag used in recentTagsStore`() = runTest(testDispatcher) {
+    viewModel.changeTag("Mood", "Chill; Happy")
+    advanceUntilIdle()
+
+    coVerify {
+      recentTagsStore.recordTagUsed("Mood", "Chill")
+      recentTagsStore.recordTagUsed("Mood", "Happy")
+    }
+  }
+
+  @Test
+  fun `getSuggestionsForTag should prioritize recent tags over DB suggestions and limit to tagSuggestionLimit`() {
+    every { recentTagsStore.getRecentTags("mood") } returns listOf("Chill", "Calm")
+    every { suggestionDao.getSuggestionsForTag("mood") } returns listOf("Energetic", "Calm", "Happy", "Sad", "Zen", "Moody", "Dark", "Bright")
+
+    val suggestions = viewModel.getSuggestionsForTag("Mood")
+
+    // Chill (recent), Calm (recent & deduplicated), then Energetic, Happy, Sad, Zen, Moody, Dark (capped at 8)
+    assertThat(suggestions).containsExactly(
+      "Chill",
+      "Calm",
+      "Energetic",
+      "Happy",
+      "Sad",
+      "Zen",
+      "Moody",
+      "Dark"
+    ).inOrder()
   }
 }

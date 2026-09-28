@@ -109,8 +109,12 @@ class UpdateNowPlayingTrack(
         path = track.path
       )
     stateHandler.updatePlayingTrack(newState)
+    stateHandler.updatePlayingPosition(
+      PlayingPosition(current = 0, total = newState.duration.coerceAtLeast(0))
+    )
     notifier.persistTrackInfo(newState)
     notifier.requestTrackDetails()
+    notifier.requestPlaybackPosition()
   }
 }
 

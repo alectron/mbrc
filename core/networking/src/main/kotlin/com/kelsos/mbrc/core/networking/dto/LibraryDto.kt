@@ -98,3 +98,23 @@ data class CoverDto(
   @Json(name = "hash")
   val hash: String?
 )
+
+@JsonClass(generateAdapter = true)
+data class BrowseTagValuesRequest(
+  @Json(name = "tags")
+  val tags: List<String> = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
+data class TagValuesEntryDto(
+  @Json(name = "tag")
+  val tag: String = "",
+  @Json(name = "values")
+  val values: List<String> = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
+data class BrowseTagValuesResponse(
+  @Json(name = "results")
+  val results: List<TagValuesEntryDto> = emptyList()
+)

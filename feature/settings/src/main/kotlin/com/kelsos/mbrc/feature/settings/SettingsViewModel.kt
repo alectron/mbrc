@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+import com.kelsos.mbrc.feature.settings.domain.TagMetadataSyncUseCase
+
 /**
  * Types of dialogs that can be shown in the Settings Screen.
  */
@@ -25,6 +27,14 @@ sealed class SettingsDialogType {
   data object TrackDefaultAction : SettingsDialogType()
   data object KeepScreenOn : SettingsDialogType()
   data object AddCustomTagField : SettingsDialogType()
+  data object TagSuggestionLimit : SettingsDialogType()
+}
+
+sealed class TagSyncState {
+  data object Idle : TagSyncState()
+  data object Syncing : TagSyncState()
+  data class Success(val count: Int) : TagSyncState()
+  data class Error(val message: String) : TagSyncState()
 }
 
 /**
@@ -33,7 +43,8 @@ sealed class SettingsDialogType {
  */
 class SettingsViewModel(
   private val settingsManager: SettingsManager,
-  private val serviceRestarter: ServiceRestarter
+  private val serviceRestarter: ServiceRestarter,
+  private val tagMetadataSyncUseCase: TagMetadataSyncUseCase? = null
 ) : ViewModel() {
 
   // State flows from settings manager
@@ -63,6 +74,12 @@ class SettingsViewModel(
 
   val customTagFields: StateFlow<List<CustomTagFieldConfig>> = settingsManager.customTagFieldsFlow
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), CustomTagFieldConfig.DEFAULT_TAGS)
+
+  val tagSuggestionLimit: StateFlow<Int> = settingsManager.tagSuggestionLimitFlow
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 8)
+
+  private val _tagSyncState = MutableStateFlow<TagSyncState>(TagSyncState.Idle)
+  val tagSyncState: StateFlow<TagSyncState> = _tagSyncState.asStateFlow()
 
   // Dialog state
   private val _visibleDialog = MutableStateFlow<SettingsDialogType?>(null)
@@ -185,6 +202,32 @@ class SettingsViewModel(
       val item = current[index]
       current[index] = item.copy(isEnabled = !item.isEnabled)
       updateCustomTagFields(current)
+    }
+  }
+
+  /**
+   * Updates the maximum number of suggestion chips to display.
+   */
+  fun setTagSuggestionLimit(limit: Int) {
+    viewModelScope.launch {
+      settingsManager.setTagSuggestionLimit(limit)
+    }
+  }
+
+  /**
+   * Re-syncs tag metadata from MusicBee.
+   */
+  fun syncTagMetadata() {
+    if (_tagSyncState.value is TagSyncState.Syncing) return
+    _tagSyncState.value = TagSyncState.Syncing
+    viewModelScope.launch {
+      val result = tagMetadataSyncUseCase?.syncTags()
+      if (result != null && result.isSuccess) {
+        _tagSyncState.value = TagSyncState.Success(result.getOrDefault(0))
+      } else {
+        val msg = result?.exceptionOrNull()?.message ?: "Sync failed"
+        _tagSyncState.value = TagSyncState.Error(msg)
+      }
     }
   }
 

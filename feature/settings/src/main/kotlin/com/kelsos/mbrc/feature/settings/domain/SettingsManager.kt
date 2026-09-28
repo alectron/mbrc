@@ -29,6 +29,7 @@ interface SettingsManager :
   val showRatingOnPlayerFlow: Flow<Boolean>
   val keepScreenOnFlow: Flow<KeepScreenOn>
   val customTagFieldsFlow: Flow<List<CustomTagFieldConfig>>
+  val tagSuggestionLimitFlow: Flow<Int>
 
   // Async update methods for changing settings (type-safe with sealed classes)
   suspend fun setTheme(theme: Theme)
@@ -41,6 +42,7 @@ interface SettingsManager :
   suspend fun setShowRatingOnPlayer(enabled: Boolean)
   suspend fun setKeepScreenOn(mode: KeepScreenOn)
   suspend fun setCustomTagFields(fields: List<CustomTagFieldConfig>)
+  suspend fun setTagSuggestionLimit(limit: Int)
 
   // Async utility methods
   override suspend fun checkShouldShowChangeLog(): Boolean
