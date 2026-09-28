@@ -37,7 +37,7 @@ class TagMetadataSyncUseCaseImpl(
       var totalInserted = 0
       val syncTimestamp = System.currentTimeMillis()
 
-      for (entry in response.results) {
+      for (entry in response.allEntries) {
         val tagName = entry.tag.trim()
         val values = entry.values.map { it.trim() }.filter { it.isNotBlank() }.distinct()
 

@@ -115,6 +115,10 @@ data class TagValuesEntryDto(
 
 @JsonClass(generateAdapter = true)
 data class BrowseTagValuesResponse(
+  @Json(name = "entries")
+  val entries: List<TagValuesEntryDto> = emptyList(),
   @Json(name = "results")
   val results: List<TagValuesEntryDto> = emptyList()
-)
+) {
+  val allEntries: List<TagValuesEntryDto> get() = entries.ifEmpty { results }
+}

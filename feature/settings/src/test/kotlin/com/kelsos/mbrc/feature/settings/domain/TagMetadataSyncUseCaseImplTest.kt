@@ -57,7 +57,7 @@ class TagMetadataSyncUseCaseImplTest {
     every { settingsManager.customTagFieldsFlow } returns flowOf(configuredTags)
 
     coEvery { libraryApi.browseTagValues(any()) } returns BrowseTagValuesResponse(
-      results = listOf(
+      entries = listOf(
         TagValuesEntryDto(tag = "Mood", values = listOf("Energetic", "Calm")),
         TagValuesEntryDto(tag = "genre", values = listOf("Rock", "Jazz", "Electronic"))
       )

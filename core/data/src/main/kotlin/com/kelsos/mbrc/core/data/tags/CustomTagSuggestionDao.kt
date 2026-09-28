@@ -25,6 +25,9 @@ interface CustomTagSuggestionDao {
   @Query("SELECT DISTINCT LOWER(tag || ':' || value) FROM custom_tag_suggestions")
   fun getAllConfirmedTagValues(): List<String>
 
+  @Query("SELECT DISTINCT LOWER(tag || ':' || value) FROM custom_tag_suggestions")
+  fun getAllConfirmedTagValuesFlow(): kotlinx.coroutines.flow.Flow<List<String>>
+
   @Query("DELETE FROM custom_tag_suggestions WHERE LOWER(tag) = LOWER(:tag) AND date_added < :timestamp")
   fun removeOldEntriesForTag(tag: String, timestamp: Long)
 

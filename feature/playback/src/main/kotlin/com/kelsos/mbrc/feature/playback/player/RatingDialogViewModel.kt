@@ -87,6 +87,10 @@ class RatingDialogViewModel(
     viewModelScope.launch(Dispatchers.IO) {
       loadConfirmedTags()
       _genreSuggestions.value = getSuggestionsForTag("genre")
+      suggestionDao?.getAllConfirmedTagValuesFlow()?.collect {
+        loadConfirmedTags()
+        _genreSuggestions.value = getSuggestionsForTag("genre")
+      }
     }
   }
 
