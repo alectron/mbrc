@@ -1,6 +1,25 @@
 Changelog
 -----------
 
+## [1.7.2] - 2026-09-29
+### Added
+- Two-tier autocomplete engine for custom metadata chips: quick suggestions up to user-configured limit plus instant real-time search across the entire library vocabulary (388+ genres).
+- Fast tag metadata re-sync in Settings with atomic cache flush (wiping to 0 when no custom tags enabled) and live SQLite record count display.
+- Technical documentation: added [v1.7.2 Milestone Report](docs/milestones/v1.7.2-milestone-report.md) detailing architecture, sequence flows, and protocols.
+
+### Fixed
+- Fixed Room database main thread access crash by caching suggestions asynchronously in `StateFlow` on `Dispatchers.IO`.
+- Fixed timeline playhead desynchronization on track skips by resetting playhead and requesting immediate playback position update.
+- Fixed bottom sheet fluttering/jittering near the top edge by locking `skipPartiallyExpanded = true` in Jetpack Compose modal bottom sheets.
+- Fixed JSON field mapping for `BrowseTagValues` entries and enabled reactive observation of confirmed tags.
+
+## [1.7.1] - 2026-09-28
+### Added
+- Two-way custom metadata tag viewing and editing: extended playing track rating bottom sheet with Energy 1-10 selector, dynamic FlowRow multi-value chips (Genre, Instruments), and freeform text tags.
+- Instant optimistic UI updates (0ms feedback) for tag changes and rating adjustments.
+- Settings management screen to configure, enable/disable, and reorder custom tag fields matching MusicBee custom slots (Custom1..Custom16).
+- Room database schema migration (v4 → v5) adding `custom_tag_suggestions` table with compound unique indexing and LRU recent tags cache.
+
 ## [1.7.0] - 2026-09-25
 ### Added
 - The now playing queue opens on the track that is playing instead of at the top, with a couple of tracks above it for context. A new action in the top bar jumps back to the playing track after you have scrolled away. The queue is left alone if you start scrolling before the track is located, so it never moves under your finger.

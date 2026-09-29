@@ -90,8 +90,8 @@ val buildTimeProvider = providers.provider {
   df.format(Date())
 }
 
-val appVersionName = "1.7.1"
-val appVersionCode = 133
+val appVersionName = "1.7.2"
+val appVersionCode = 134
 val minSDKVersion = 23
 val compileSDKVersion = 37
 // targetSdk 37 opts into Android 17 behaviors (see ACCESS_LOCAL_NETWORK handling in MainActivity).
