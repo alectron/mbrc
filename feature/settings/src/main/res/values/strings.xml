@@ -83,8 +83,11 @@
   <string name="settings_custom_tags_empty">No custom tag fields configured</string>
   <string name="settings_custom_tags_resync">Re-sync Tag Metadata</string>
   <string name="settings_custom_tags_resync_summary">Fetch fresh metadata values from MusicBee for all configured tags</string>
+  <string name="settings_custom_tags_resync_summary_with_count">Fetch fresh metadata values from MusicBee (%1$d cached in database)</string>
+  <string name="settings_custom_tags_resync_summary_empty">Database is empty (0 cached values)</string>
   <string name="settings_custom_tags_resync_syncing">Syncing metadata from MusicBee...</string>
   <string name="settings_custom_tags_resync_success">Synced %1$d metadata values from MusicBee</string>
+  <string name="settings_custom_tags_resync_success_empty">Database flushed (0 cached values)</string>
   <string name="settings_custom_tags_resync_failed">Failed to sync: %1$s</string>
   <string name="settings_custom_tags_suggestion_limit">Suggestion Chip Count</string>
   <string name="settings_custom_tags_suggestion_limit_summary">%1$d suggestions</string>

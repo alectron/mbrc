@@ -34,6 +34,12 @@ interface CustomTagSuggestionDao {
   @Query("DELETE FROM custom_tag_suggestions WHERE LOWER(tag) = LOWER(:tag)")
   fun deleteByTag(tag: String)
 
+  @Query("SELECT COUNT(*) FROM custom_tag_suggestions")
+  fun count(): Int
+
+  @Query("SELECT COUNT(*) FROM custom_tag_suggestions")
+  fun countFlow(): kotlinx.coroutines.flow.Flow<Int>
+
   @Query("DELETE FROM custom_tag_suggestions")
   fun clearAll()
 }

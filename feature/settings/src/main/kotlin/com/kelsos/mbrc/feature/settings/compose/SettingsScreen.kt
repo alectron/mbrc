@@ -97,6 +97,7 @@ data class SettingsContentState(
   val customTagFields: List<CustomTagFieldConfig> = CustomTagFieldConfig.DEFAULT_TAGS,
   val tagSuggestionLimit: Int = 8,
   val tagSyncState: TagSyncState = TagSyncState.Idle,
+  val cachedTagCount: Int = 0,
   val visibleDialog: SettingsDialogType? = null
 )
 
@@ -520,6 +521,7 @@ fun SettingsScreenContent(
         customTagFields = state.customTagFields,
         tagSuggestionLimit = state.tagSuggestionLimit,
         tagSyncState = state.tagSyncState,
+        cachedTagCount = state.cachedTagCount,
         onAddTagClick = actions.onAddCustomTagFieldClick,
         onToggleTag = actions.onCustomTagFieldToggled,
         onRemoveTag = actions.onCustomTagFieldRemoved,
@@ -700,12 +702,14 @@ private fun CustomTagsSettingsSection(viewModel: SettingsViewModel) {
   val customTagFields by viewModel.customTagFields.collectAsStateWithLifecycle()
   val tagSuggestionLimit by viewModel.tagSuggestionLimit.collectAsStateWithLifecycle()
   val tagSyncState by viewModel.tagSyncState.collectAsStateWithLifecycle()
+  val cachedTagCount by viewModel.cachedTagCount.collectAsStateWithLifecycle()
   val visibleDialog by viewModel.visibleDialog.collectAsStateWithLifecycle()
 
   CustomTagsContentSection(
     customTagFields = customTagFields,
     tagSuggestionLimit = tagSuggestionLimit,
     tagSyncState = tagSyncState,
+    cachedTagCount = cachedTagCount,
     onAddTagClick = { viewModel.showDialog(SettingsDialogType.AddCustomTagField) },
     onToggleTag = { index -> viewModel.toggleCustomTagField(index) },
     onRemoveTag = { index -> viewModel.removeCustomTagField(index) },
@@ -743,6 +747,7 @@ internal fun CustomTagsContentSection(
   customTagFields: List<CustomTagFieldConfig>,
   tagSuggestionLimit: Int = 8,
   tagSyncState: TagSyncState = TagSyncState.Idle,
+  cachedTagCount: Int = 0,
   onAddTagClick: () -> Unit,
   onToggleTag: (Int) -> Unit,
   onRemoveTag: (Int) -> Unit,
@@ -775,9 +780,21 @@ internal fun CustomTagsContentSection(
 
     val syncSubtitle = when (tagSyncState) {
       is TagSyncState.Syncing -> stringResource(R.string.settings_custom_tags_resync_syncing)
-      is TagSyncState.Success -> stringResource(R.string.settings_custom_tags_resync_success, tagSyncState.count)
+      is TagSyncState.Success -> {
+        if (tagSyncState.count == 0) {
+          stringResource(R.string.settings_custom_tags_resync_success_empty)
+        } else {
+          stringResource(R.string.settings_custom_tags_resync_success, tagSyncState.count)
+        }
+      }
       is TagSyncState.Error -> stringResource(R.string.settings_custom_tags_resync_failed, tagSyncState.message)
-      is TagSyncState.Idle -> stringResource(R.string.settings_custom_tags_resync_summary)
+      is TagSyncState.Idle -> {
+        if (cachedTagCount > 0) {
+          stringResource(R.string.settings_custom_tags_resync_summary_with_count, cachedTagCount)
+        } else {
+          stringResource(R.string.settings_custom_tags_resync_summary_empty)
+        }
+      }
     }
 
     SettingsItem(

@@ -63,6 +63,9 @@ class RatingDialogViewModel(
   private val _tagSuggestionsMap = MutableStateFlow<Map<String, List<String>>>(emptyMap())
   val tagSuggestionsMap: StateFlow<Map<String, List<String>>> = _tagSuggestionsMap.asStateFlow()
 
+  private val _allTagValuesMap = MutableStateFlow<Map<String, List<String>>>(emptyMap())
+  val allTagValuesMap: StateFlow<Map<String, List<String>>> = _allTagValuesMap.asStateFlow()
+
   init {
     viewModelScope.launch {
       appState.playingTrackRating.map { it.rating }.distinctUntilChanged().collect {
@@ -110,31 +113,15 @@ class RatingDialogViewModel(
     try {
       val set = mutableSetOf<String>()
       suggestionDao?.getAllConfirmedTagValues()?.let { set.addAll(it) }
-      genreDao?.genres()?.forEach {
-        if (it.genre.isNotBlank()) {
-          set.add("genre:${it.genre.trim().lowercase()}")
-        }
-      }
       _confirmedTags.value = set
     } catch (_: Exception) {
       // Ignored if DB not initialized or in unit tests
     }
   }
 
-  private fun computeSuggestions(tag: String, limit: Int): List<String> {
+  private fun computeQuickSuggestions(tag: String, listFromDb: List<String>, limit: Int): List<String> {
     val normalizedTag = tag.trim().lowercase()
     val recent = recentTagsStore?.getRecentTags(normalizedTag) ?: emptyList()
-
-    val fromDb = try {
-      val list = mutableListOf<String>()
-      suggestionDao?.getSuggestionsForTag(normalizedTag)?.let { list.addAll(it) }
-      if (normalizedTag == "genre") {
-        genreDao?.genres()?.map { it.genre }?.let { list.addAll(it) }
-      }
-      list.filter { it.isNotBlank() }.distinct()
-    } catch (_: Exception) {
-      emptyList()
-    }
 
     val result = mutableListOf<String>()
     val seen = mutableSetOf<String>()
@@ -147,7 +134,7 @@ class RatingDialogViewModel(
       }
     }
 
-    for (item in fromDb) {
+    for (item in listFromDb) {
       val lower = item.lowercase()
       if (seen.add(lower)) {
         result.add(item)
@@ -160,19 +147,30 @@ class RatingDialogViewModel(
 
   private suspend fun refreshAllSuggestions() = withContext(Dispatchers.IO) {
     val limit = tagSuggestionLimit.value
-    val tags = (customTagFields.value.map { it.tag } + "genre")
+    val tags = customTagFields.value.map { it.tag }
       .map { it.trim().lowercase() }
+      .filter { it.isNotBlank() }
       .distinct()
-    val map = mutableMapOf<String, List<String>>()
+    val quickMap = mutableMapOf<String, List<String>>()
+    val allMap = mutableMapOf<String, List<String>>()
+
     for (tag in tags) {
-      map[tag] = computeSuggestions(tag, limit)
+      val listFromDb = try {
+        suggestionDao?.getSuggestionsForTag(tag)?.filter { it.isNotBlank() }?.distinct() ?: emptyList()
+      } catch (_: Exception) {
+        emptyList()
+      }
+      allMap[tag] = listFromDb
+      quickMap[tag] = computeQuickSuggestions(tag, listFromDb, limit)
     }
-    _tagSuggestionsMap.value = map
-    _genreSuggestions.value = map["genre"] ?: emptyList()
+
+    _allTagValuesMap.value = allMap
+    _tagSuggestionsMap.value = quickMap
+    _genreSuggestions.value = quickMap["genre"] ?: emptyList()
   }
 
   /**
-   * Returns merged suggestions for the given tag:
+   * Returns quick suggestions for the given tag:
    * 1. In-memory cache from IO thread first (safe on Main Thread)
    * 2. Fallback to direct computation
    */
@@ -182,7 +180,16 @@ class RatingDialogViewModel(
     if (cached != null && cached.isNotEmpty()) {
       return cached
     }
-    return computeSuggestions(tag, tagSuggestionLimit.value)
+    val allValues = _allTagValuesMap.value[normalized] ?: emptyList()
+    return computeQuickSuggestions(tag, allValues, tagSuggestionLimit.value)
+  }
+
+  /**
+   * Returns all known values for the given tag (for dialog search/autocomplete).
+   */
+  fun getAllValuesForTag(tag: String): List<String> {
+    val normalized = tag.trim().lowercase()
+    return _allTagValuesMap.value[normalized] ?: emptyList()
   }
 
   /**

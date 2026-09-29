@@ -79,6 +79,7 @@ fun PlayerBottomSheet(
   val confirmedTags by viewModel.confirmedTags.collectAsStateWithLifecycle()
   val tagSuggestionLimit by viewModel.tagSuggestionLimit.collectAsStateWithLifecycle()
   val tagSuggestionsMap by viewModel.tagSuggestionsMap.collectAsStateWithLifecycle()
+  val allTagValuesMap by viewModel.allTagValuesMap.collectAsStateWithLifecycle()
 
   ModalBottomSheet(
     onDismissRequest = onDismiss,
@@ -260,12 +261,14 @@ fun PlayerBottomSheet(
 
         customTagFields.forEach { config ->
           val normalizedKey = config.tag.trim().lowercase()
-          val tagSuggestions = tagSuggestionsMap[normalizedKey] ?: viewModel.getSuggestionsForTag(config.tag)
+          val quickSuggestions = tagSuggestionsMap[normalizedKey] ?: viewModel.getSuggestionsForTag(config.tag)
+          val allValues = allTagValuesMap[normalizedKey] ?: viewModel.getAllValuesForTag(config.tag)
           CustomTagFieldRow(
             config = config,
             currentValue = trackDetails.getTagValue(config.tag),
             onValueChange = { newValue -> viewModel.changeTag(config.tag, newValue) },
-            suggestions = tagSuggestions,
+            quickSuggestions = quickSuggestions,
+            allValues = allValues,
             isTagConfirmed = { tag, value -> viewModel.isTagConfirmed(tag, value) }
           )
           Spacer(modifier = Modifier.height(12.dp))
@@ -281,7 +284,8 @@ private fun CustomTagFieldRow(
   config: CustomTagFieldConfig,
   currentValue: String,
   onValueChange: (String) -> Unit,
-  suggestions: List<String>,
+  quickSuggestions: List<String>,
+  allValues: List<String>,
   isTagConfirmed: (String, String) -> Boolean
 ) {
   var showAddDialog by remember { mutableStateOf(false) }
@@ -367,7 +371,8 @@ private fun CustomTagFieldRow(
       if (showAddDialog) {
         AddTagValueDialog(
           tagName = config.tag,
-          suggestions = suggestions,
+          quickSuggestions = quickSuggestions,
+          allValues = allValues,
           isTagConfirmed = isTagConfirmed,
           onAdd = { newTag ->
             val updated = (values + newTag).distinct()
@@ -459,15 +464,21 @@ private fun CustomTagFieldRow(
 @Composable
 private fun AddTagValueDialog(
   tagName: String,
-  suggestions: List<String>,
+  quickSuggestions: List<String>,
+  allValues: List<String>,
   isTagConfirmed: (String, String) -> Boolean,
   onAdd: (String) -> Unit,
   onDismiss: () -> Unit
 ) {
   var text by remember { mutableStateOf("") }
-  val filteredSuggestions = remember(text, suggestions) {
-    if (text.isBlank()) suggestions
-    else suggestions.filter { it.contains(text, ignoreCase = true) }
+  val filteredSuggestions = remember(text, quickSuggestions, allValues) {
+    if (text.isBlank()) {
+      quickSuggestions
+    } else {
+      allValues
+        .filter { it.contains(text.trim(), ignoreCase = true) }
+        .take(20)
+    }
   }
 
   AlertDialog(

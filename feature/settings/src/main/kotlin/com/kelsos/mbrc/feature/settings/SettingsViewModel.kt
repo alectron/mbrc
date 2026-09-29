@@ -78,6 +78,9 @@ class SettingsViewModel(
   val tagSuggestionLimit: StateFlow<Int> = settingsManager.tagSuggestionLimitFlow
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 8)
 
+  val cachedTagCount: StateFlow<Int> = (tagMetadataSyncUseCase?.getCachedTagCountFlow() ?: kotlinx.coroutines.flow.flowOf(0))
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
   private val _tagSyncState = MutableStateFlow<TagSyncState>(TagSyncState.Idle)
   val tagSyncState: StateFlow<TagSyncState> = _tagSyncState.asStateFlow()
 

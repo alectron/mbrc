@@ -55,24 +55,35 @@ class TagMetadataSyncUseCaseImplTest {
       CustomTagFieldConfig(tag = "Energy", isMultiValue = false, isEnabled = false)
     )
     every { settingsManager.customTagFieldsFlow } returns flowOf(configuredTags)
+    every { suggestionDao.count() } returns 2
 
     coEvery { libraryApi.browseTagValues(any()) } returns BrowseTagValuesResponse(
       entries = listOf(
-        TagValuesEntryDto(tag = "Mood", values = listOf("Energetic", "Calm")),
-        TagValuesEntryDto(tag = "genre", values = listOf("Rock", "Jazz", "Electronic"))
+        TagValuesEntryDto(tag = "Mood", values = listOf("Energetic", "Calm"))
       )
     )
 
     val result = useCase.syncTags()
 
     assertThat(result.isSuccess).isTrue()
-    assertThat(result.getOrNull()).isEqualTo(5)
+    assertThat(result.getOrNull()).isEqualTo(2)
 
+    verify { suggestionDao.clearAll() }
     val insertedSlot = mutableListOf<List<CustomTagSuggestionEntity>>()
     verify { suggestionDao.insertAll(capture(insertedSlot)) }
-    assertThat(insertedSlot.flatten().map { it.value }).containsExactly("Energetic", "Calm", "Rock", "Jazz", "Electronic")
-    verify { suggestionDao.removeOldEntriesForTag("Mood", any()) }
-    verify { suggestionDao.removeOldEntriesForTag("genre", any()) }
+    assertThat(insertedSlot.flatten().map { it.value }).containsExactly("Energetic", "Calm")
+  }
+
+  @Test
+  fun `syncTags with no enabled tags flushes SQLite cache and returns 0`() = runTest(testDispatcher) {
+    every { settingsManager.customTagFieldsFlow } returns flowOf(emptyList())
+
+    val result = useCase.syncTags()
+
+    assertThat(result.isSuccess).isTrue()
+    assertThat(result.getOrNull()).isEqualTo(0)
+    verify { suggestionDao.clearAll() }
+    coVerify(exactly = 0) { libraryApi.browseTagValues(any()) }
   }
 
   @Test
