@@ -26,8 +26,20 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+import com.kelsos.mbrc.core.common.utilities.coroutines.AppCoroutineDispatchers
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.withContext
+
+data class TagClipboardEntry(
+  val tagName: String,
+  val values: List<String>,
+  val remainingTtl: Int = 10
+)
+
+data class PendingReorderEntry(
+  val tagName: String,
+  val values: List<String>
+)
 
 class RatingDialogViewModel(
   private val userActionUseCase: UserActionUseCase,
@@ -35,8 +47,10 @@ class RatingDialogViewModel(
   private val settingsManager: SettingsManager,
   private val genreDao: GenreDao? = null,
   private val suggestionDao: CustomTagSuggestionDao? = null,
-  private val recentTagsStore: RecentTagsStore? = null
+  private val recentTagsStore: RecentTagsStore? = null,
+  private val dispatchers: AppCoroutineDispatchers? = null
 ) : ViewModel() {
+  private val ioDispatcher = dispatchers?.io ?: Dispatchers.IO
   private val _rating: MutableStateFlow<Float?> = MutableStateFlow(null)
   val rating: Flow<Float?> get() = _rating
 
@@ -66,6 +80,12 @@ class RatingDialogViewModel(
   private val _allTagValuesMap = MutableStateFlow<Map<String, List<String>>>(emptyMap())
   val allTagValuesMap: StateFlow<Map<String, List<String>>> = _allTagValuesMap.asStateFlow()
 
+  private val _tagClipboard = MutableStateFlow<Map<String, TagClipboardEntry>>(emptyMap())
+  val tagClipboard: StateFlow<Map<String, TagClipboardEntry>> = _tagClipboard.asStateFlow()
+
+  private val _pendingReorders = MutableStateFlow<Map<String, PendingReorderEntry>>(emptyMap())
+  val pendingReorders: StateFlow<Map<String, PendingReorderEntry>> = _pendingReorders.asStateFlow()
+
   init {
     viewModelScope.launch {
       appState.playingTrackRating.map { it.rating }.distinctUntilChanged().collect {
@@ -81,10 +101,28 @@ class RatingDialogViewModel(
         _trackDetails.value = current
       }
     }
+    var lastTrackId: String? = null
     viewModelScope.launch {
-      appState.playingTrack.collect {
+      appState.playingTrack.collect { track ->
         _optimisticTags.value = emptyMap()
         _trackDetails.value = appState.playingTrackDetails.value
+
+        val currentId = track.path.ifBlank { "${track.artist}:${track.title}" }
+        if (lastTrackId != null && lastTrackId != currentId) {
+          _tagClipboard.update { current ->
+            current.mapNotNull { (key, entry) ->
+              val nextTtl = entry.remainingTtl - 1
+              if (nextTtl > 0) {
+                key to entry.copy(remainingTtl = nextTtl)
+              } else {
+                null
+              }
+            }.toMap()
+          }
+        }
+        if (currentId.isNotBlank()) {
+          lastTrackId = currentId
+        }
       }
     }
     viewModelScope.launch {
@@ -93,7 +131,7 @@ class RatingDialogViewModel(
     viewModelScope.launch {
       userActionUseCase.perform(UserAction.create(Protocol.NowPlayingDetails))
     }
-    viewModelScope.launch(Dispatchers.IO) {
+    viewModelScope.launch(ioDispatcher) {
       loadConfirmedTags()
       refreshAllSuggestions()
 
@@ -145,7 +183,7 @@ class RatingDialogViewModel(
     return result
   }
 
-  private suspend fun refreshAllSuggestions() = withContext(Dispatchers.IO) {
+  private suspend fun refreshAllSuggestions() = withContext(ioDispatcher) {
     val limit = tagSuggestionLimit.value
     val tags = customTagFields.value.map { it.tag }
       .map { it.trim().lowercase() }
@@ -164,6 +202,9 @@ class RatingDialogViewModel(
       quickMap[tag] = computeQuickSuggestions(tag, listFromDb, limit)
     }
 
+    // Prune stale tag history for removed tag fields
+    recentTagsStore?.pruneStaleTags(tags.toSet())
+
     _allTagValuesMap.value = allMap
     _tagSuggestionsMap.value = quickMap
     _genreSuggestions.value = quickMap["genre"] ?: emptyList()
@@ -171,8 +212,7 @@ class RatingDialogViewModel(
 
   /**
    * Returns quick suggestions for the given tag:
-   * 1. In-memory cache from IO thread first (safe on Main Thread)
-   * 2. Fallback to direct computation
+   * Uses in-memory cache safely on the Main Thread.
    */
   fun getSuggestionsForTag(tag: String): List<String> {
     val normalized = tag.trim().lowercase()
@@ -180,8 +220,23 @@ class RatingDialogViewModel(
     if (cached != null && cached.isNotEmpty()) {
       return cached
     }
-    val allValues = _allTagValuesMap.value[normalized] ?: emptyList()
-    return computeQuickSuggestions(tag, allValues, tagSuggestionLimit.value)
+    val inMemoryValues = _allTagValuesMap.value[normalized]
+    if (inMemoryValues != null && inMemoryValues.isNotEmpty()) {
+      return computeQuickSuggestions(tag, inMemoryValues, tagSuggestionLimit.value)
+    }
+
+    // Direct DB query fallback with safety protection:
+    // If called on Android Main Thread where Room prohibits main-thread queries,
+    // catch IllegalStateException and return recent suggestions safely instead of crashing.
+    val dbValues = try {
+      suggestionDao?.getSuggestionsForTag(normalized)?.filter { it.isNotBlank() }?.distinct() ?: emptyList()
+    } catch (_: IllegalStateException) {
+      emptyList()
+    } catch (_: Exception) {
+      emptyList()
+    }
+
+    return computeQuickSuggestions(tag, dbValues, tagSuggestionLimit.value)
   }
 
   /**
@@ -193,11 +248,21 @@ class RatingDialogViewModel(
   }
 
   /**
-   * Checks whether a tag value is confirmed in MusicBee / SQLite cache.
+   * Checks whether a tag value is confirmed in MusicBee / SQLite cache or on the active track.
    */
   fun isTagConfirmed(tag: String, value: String): Boolean {
     val key = "${tag.trim()}:${value.trim()}".lowercase()
-    return _confirmedTags.value.contains(key)
+    if (_confirmedTags.value.contains(key)) return true
+
+    // Check if the current playing track details already contains this tag value
+    val currentTrackVal = _trackDetails.value.getTagValue(tag)
+    if (currentTrackVal.isNotBlank()) {
+      val values = currentTrackVal.split(';').map { it.trim().lowercase() }
+      if (values.contains(value.trim().lowercase())) {
+        return true
+      }
+    }
+    return false
   }
 
   /**
@@ -217,17 +282,119 @@ class RatingDialogViewModel(
    * Changes a custom tag for the playing track.
    */
   fun changeTag(tagName: String, value: String) {
-    _optimisticTags.update { it + (tagName to value) }
-    _trackDetails.value = _trackDetails.value.withTagValue(tagName, value)
-    viewModelScope.launch(Dispatchers.IO) {
+    val cleanTagName = tagName.trim()
+    _optimisticTags.update { it + (cleanTagName to value) }
+    _trackDetails.value = _trackDetails.value.withTagValue(cleanTagName, value)
+    _pendingReorders.update { it - cleanTagName.lowercase() }
+
+    // Immediately mark saved values as confirmed so newly entered chips are styled confirmed
+    val newKeys = value.split(";")
+      .map { it.trim() }
+      .filter { it.isNotBlank() }
+      .map { "${cleanTagName}:${it}".lowercase() }
+    if (newKeys.isNotEmpty()) {
+      _confirmedTags.update { it + newKeys }
+    }
+
+    viewModelScope.launch(ioDispatcher) {
       value.split(";").forEach { piece ->
         val trimmed = piece.trim()
         if (trimmed.isNotBlank()) {
-          recentTagsStore?.recordTagUsed(tagName, trimmed)
+          recentTagsStore?.recordTagUsed(cleanTagName, trimmed)
         }
       }
       refreshAllSuggestions()
-      userActionUseCase.setTrackTag(tagName, value)
+      userActionUseCase.setTrackTag(cleanTagName, value)
     }
+  }
+
+  /**
+   * Stages a reordered list of tags in local UI state without immediately committing across the network.
+   * Shows the push icon (->) and updates the local optimistic details.
+   */
+  fun stageReorder(tagName: String, newValues: List<String>) {
+    val cleanTagName = tagName.trim()
+    val normalized = cleanTagName.lowercase()
+    _pendingReorders.update { it + (normalized to PendingReorderEntry(cleanTagName, newValues)) }
+    val joined = newValues.joinToString("; ")
+    _optimisticTags.update { it + (cleanTagName to joined) }
+    _trackDetails.value = _trackDetails.value.withTagValue(cleanTagName, joined)
+  }
+
+  /**
+   * Commits the pending reorder for a specific tag to MusicBee.
+   */
+  fun commitPendingReorder(tagName: String) {
+    val normalized = tagName.trim().lowercase()
+    val entry = _pendingReorders.value[normalized] ?: return
+    _pendingReorders.update { it - normalized }
+    reorderTags(entry.tagName, entry.values)
+  }
+
+  /**
+   * Commits all pending staged reorders (called when bottom sheet dismisses).
+   */
+  fun commitAllPendingReorders() {
+    val current = _pendingReorders.value
+    if (current.isEmpty()) return
+    _pendingReorders.value = emptyMap()
+    for ((_, entry) in current) {
+      reorderTags(entry.tagName, entry.values)
+    }
+  }
+
+  fun hasPendingReorder(tagName: String): Boolean {
+    val normalized = tagName.trim().lowercase()
+    return _pendingReorders.value.containsKey(normalized)
+  }
+
+  /**
+   * Reorders tag values for a custom tag and commits the new order.
+   */
+  fun reorderTags(tagName: String, newValues: List<String>) {
+    val joined = newValues.joinToString("; ")
+    changeTag(tagName, joined)
+  }
+
+  /**
+   * Copies active values of a tag field into the in-memory clipboard cache with a 10-track TTL.
+   */
+  fun copyTags(tagName: String, values: List<String>) {
+    if (values.isEmpty()) return
+    val normalized = tagName.trim().lowercase()
+    _tagClipboard.update { current ->
+      current + (normalized to TagClipboardEntry(tagName = tagName, values = values, remainingTtl = 10))
+    }
+  }
+
+  /**
+   * Pastes/merges cached tag values from clipboard for the specified tag field onto the current track.
+   */
+  fun pasteTags(tagName: String) {
+    val normalized = tagName.trim().lowercase()
+    val entry = _tagClipboard.value[normalized] ?: return
+    val currentRaw = _trackDetails.value.getTagValue(tagName)
+    val currentList = currentRaw.split(";")
+      .map { it.trim() }
+      .filter { it.isNotBlank() }
+      .toMutableList()
+
+    var changed = false
+    for (clipVal in entry.values) {
+      if (currentList.none { it.equals(clipVal, ignoreCase = true) }) {
+        currentList.add(clipVal)
+        changed = true
+      }
+    }
+    if (changed) {
+      changeTag(tagName, currentList.joinToString("; "))
+    }
+  }
+
+  /**
+   * Clears the in-memory tag clipboard.
+   */
+  fun clearTagClipboard() {
+    _tagClipboard.value = emptyMap()
   }
 }

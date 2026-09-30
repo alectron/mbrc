@@ -2,6 +2,7 @@ package com.kelsos.mbrc.core.networking.client
 
 import com.kelsos.mbrc.core.networking.protocol.Clock
 import com.kelsos.mbrc.core.networking.protocol.base.Protocol
+import com.kelsos.mbrc.core.networking.protocol.payloads.TagChangeRequest
 import timber.log.Timber
 
 /**
@@ -107,7 +108,16 @@ class PendingCommandBuffer(
     if (message.context !in LAST_WRITE_WINS) {
       return false
     }
-    val index = pending.indexOfFirst { it.message.context == message.context }
+    val index = pending.indexOfFirst { entry ->
+      if (entry.message.context != message.context) return@indexOfFirst false
+      if (message.context == Protocol.NowPlayingTagChange.context) {
+        val entryTag = extractTagName(entry.message.data)
+        val messageTag = extractTagName(message.data)
+        entryTag != null && messageTag != null && entryTag.equals(messageTag, ignoreCase = true)
+      } else {
+        true
+      }
+    }
     if (index == -1) {
       return false
     }
@@ -116,6 +126,12 @@ class PendingCommandBuffer(
     val queuedAt = if (pending[index].message == message) pending[index].queuedAt else now
     pending[index] = Pending(message, queuedAt)
     return true
+  }
+
+  private fun extractTagName(data: Any?): String? = when (data) {
+    is TagChangeRequest -> data.tag
+    is Map<*, *> -> data["tag"] as? String
+    else -> null
   }
 
   private fun dropExpired(now: Long) {
@@ -183,7 +199,8 @@ class PendingCommandBuffer(
       Protocol.PlayerPause.context,
       Protocol.PlayerStop.context,
       Protocol.PlayerNext.context,
-      Protocol.PlayerPrevious.context
+      Protocol.PlayerPrevious.context,
+      Protocol.NowPlayingTagChange.context
     )
 
     /**
@@ -200,7 +217,8 @@ class PendingCommandBuffer(
       Protocol.PlayerRepeat.context,
       Protocol.PlayerShuffle.context,
       Protocol.PlayerState.context,
-      Protocol.PlayerPlayPause.context
+      Protocol.PlayerPlayPause.context,
+      Protocol.NowPlayingTagChange.context
     )
   }
 }

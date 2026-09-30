@@ -110,4 +110,8 @@
   <string name="custom_tags_clear">Clear</string>
   <string name="custom_tags_empty">No tags set</string>
   <string name="custom_tags_edit_title">Edit %1$s</string>
+  <string name="custom_tags_copy">Copy %1$s tags</string>
+  <string name="custom_tags_paste">Paste %1$s tags</string>
+  <string name="custom_tags_drag_reorder">Drag to reorder</string>
+  <string name="custom_tags_push_order">Push reordered %1$s to file</string>
 </resources>

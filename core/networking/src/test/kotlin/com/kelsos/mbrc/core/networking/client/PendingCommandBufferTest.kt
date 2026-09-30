@@ -3,6 +3,7 @@ package com.kelsos.mbrc.core.networking.client
 import com.google.common.truth.Truth.assertThat
 import com.kelsos.mbrc.core.networking.protocol.Clock
 import com.kelsos.mbrc.core.networking.protocol.base.Protocol
+import com.kelsos.mbrc.core.networking.protocol.payloads.TagChangeRequest
 import org.junit.Test
 
 class PendingCommandBufferTest {
@@ -240,5 +241,53 @@ class PendingCommandBufferTest {
     buffer.drain()
 
     assertThat(discarded).isEmpty()
+  }
+
+  @Test
+  fun `now playing tag change is buffered and replayable`() {
+    val buffer = buffer()
+    val tagMessage = SocketMessage.create(
+      Protocol.NowPlayingTagChange,
+      TagChangeRequest(tag = "genre", value = "Rock")
+    )
+
+    assertThat(buffer.stash(tagMessage)).isTrue()
+    assertThat(buffer.drain()).containsExactly(tagMessage)
+  }
+
+  @Test
+  fun `tag change on same tag collapses to newest value`() {
+    val buffer = buffer()
+    val msg1 = SocketMessage.create(
+      Protocol.NowPlayingTagChange,
+      TagChangeRequest(tag = "genre", value = "Rock")
+    )
+    val msg2 = SocketMessage.create(
+      Protocol.NowPlayingTagChange,
+      TagChangeRequest(tag = "genre", value = "Pop")
+    )
+
+    buffer.stash(msg1)
+    buffer.stash(msg2)
+
+    assertThat(buffer.drain()).containsExactly(msg2)
+  }
+
+  @Test
+  fun `tag changes on different tags are both preserved`() {
+    val buffer = buffer()
+    val genreMsg = SocketMessage.create(
+      Protocol.NowPlayingTagChange,
+      TagChangeRequest(tag = "genre", value = "Rock")
+    )
+    val moodMsg = SocketMessage.create(
+      Protocol.NowPlayingTagChange,
+      TagChangeRequest(tag = "mood", value = "Energetic")
+    )
+
+    buffer.stash(genreMsg)
+    buffer.stash(moodMsg)
+
+    assertThat(buffer.drain()).containsExactly(genreMsg, moodMsg).inOrder()
   }
 }

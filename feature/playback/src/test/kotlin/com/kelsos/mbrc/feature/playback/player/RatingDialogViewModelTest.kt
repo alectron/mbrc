@@ -67,7 +67,8 @@ class RatingDialogViewModelTest : KoinTest {
         settingsManager = get(),
         genreDao = get(),
         suggestionDao = get(),
-        recentTagsStore = get()
+        recentTagsStore = get(),
+        dispatchers = get()
       )
     }
   }
@@ -332,5 +333,51 @@ class RatingDialogViewModelTest : KoinTest {
       "Moody",
       "Dark"
     ).inOrder()
+  }
+
+  @Test
+  fun `copyTags populates tagClipboard with 10 TTL`() = runTest(testDispatcher) {
+    viewModel.copyTags("Mood", listOf("Chill", "Happy"))
+    val clipboard = viewModel.tagClipboard.value
+    assertThat(clipboard).containsKey("mood")
+    assertThat(clipboard["mood"]?.values).containsExactly("Chill", "Happy").inOrder()
+    assertThat(clipboard["mood"]?.remainingTtl).isEqualTo(10)
+  }
+
+  @Test
+  fun `tagClipboard TTL decrements on track change and evicts after 10 tracks`() = runTest(testDispatcher) {
+    viewModel.copyTags("Mood", listOf("Chill"))
+
+    // Change track 9 times
+    for (i in 1..9) {
+      playingTrackFlow.emit(BasicTrackInfo(title = "Track $i", artist = "Artist", path = "/path/$i"))
+      testScheduler.advanceUntilIdle()
+      assertThat(viewModel.tagClipboard.value["mood"]?.remainingTtl).isEqualTo(10 - i)
+    }
+
+    // 10th track change: evicts
+    playingTrackFlow.emit(BasicTrackInfo(title = "Track 10", artist = "Artist", path = "/path/10"))
+    testScheduler.advanceUntilIdle()
+    assertThat(viewModel.tagClipboard.value).doesNotContainKey("mood")
+  }
+
+  @Test
+  fun `pasteTags merges clipboard tags onto active track without duplicates`() = runTest(testDispatcher) {
+    viewModel.changeTag("Mood", "Happy; Dark")
+    testScheduler.advanceUntilIdle()
+
+    viewModel.copyTags("Mood", listOf("Dark", "Chill", "Energetic"))
+    viewModel.pasteTags("Mood")
+    testScheduler.advanceUntilIdle()
+
+    assertThat(viewModel.trackDetails.value.getTagValue("Mood")).isEqualTo("Happy; Dark; Chill; Energetic")
+  }
+
+  @Test
+  fun `reorderTags updates tag value with the specified order`() = runTest(testDispatcher) {
+    viewModel.reorderTags("Mood", listOf("Dark", "Happy", "Chill"))
+    testScheduler.advanceUntilIdle()
+
+    assertThat(viewModel.trackDetails.value.getTagValue("Mood")).isEqualTo("Dark; Happy; Chill")
   }
 }

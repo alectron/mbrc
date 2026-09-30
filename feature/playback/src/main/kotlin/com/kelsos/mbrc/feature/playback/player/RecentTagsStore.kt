@@ -13,6 +13,9 @@ interface RecentTagsStore {
   fun getRecentTags(tag: String): List<String>
   fun getRecentTagsFlow(tag: String): Flow<List<String>>
   suspend fun recordTagUsed(tag: String, value: String)
+  fun pruneStaleTags(activeTags: Set<String>)
+  fun clearTag(tag: String)
+  fun clearAll()
 }
 
 class RecentTagsStoreImpl(
@@ -62,10 +65,48 @@ class RecentTagsStoreImpl(
     flows[normalizedTag]?.value = capped
   }
 
-  private fun keyFor(tag: String): String = "recent_tags_${tag.trim().lowercase()}"
+  override fun pruneStaleTags(activeTags: Set<String>) {
+    val normalizedActive = activeTags.map { it.trim().lowercase() }.toSet()
+    val editor = prefs.edit()
+    var modified = false
+    prefs.all.keys.filter { it.startsWith(PREFS_PREFIX) }.forEach { key ->
+      val tagName = key.removePrefix(PREFS_PREFIX)
+      if (tagName !in normalizedActive) {
+        editor.remove(key)
+        flows[tagName]?.value = emptyList()
+        modified = true
+      }
+    }
+    if (modified) {
+      editor.apply()
+    }
+  }
+
+  override fun clearTag(tag: String) {
+    val normalized = tag.trim().lowercase()
+    prefs.edit().remove(keyFor(normalized)).apply()
+    flows[normalized]?.value = emptyList()
+  }
+
+  override fun clearAll() {
+    val editor = prefs.edit()
+    var modified = false
+    prefs.all.keys.filter { it.startsWith(PREFS_PREFIX) }.forEach { key ->
+      editor.remove(key)
+      val tagName = key.removePrefix(PREFS_PREFIX)
+      flows[tagName]?.value = emptyList()
+      modified = true
+    }
+    if (modified) {
+      editor.apply()
+    }
+  }
+
+  private fun keyFor(tag: String): String = "$PREFS_PREFIX${tag.trim().lowercase()}"
 
   companion object {
     private const val PREFS_NAME = "mbrc_recent_tags"
-    private const val MAX_RECENT_TAGS = 30
+    private const val PREFS_PREFIX = "recent_tags_"
+    private const val MAX_RECENT_TAGS = 50
   }
 }

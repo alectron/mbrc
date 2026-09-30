@@ -1,6 +1,23 @@
 Changelog
 -----------
 
+## [1.7.3] - 2026-09-30
+### Added
+- Chip reordering via long-press drag and drop with expanding gap micro-animation and explicit push (`->`) commit button.
+- Pending chip reorders auto-committed to MusicBee upon bottom sheet close or dismissal.
+- Tag field Copy & Paste functionality with 10-track TTL countdown listener.
+- Offline tag edit queuing and network reconnect replay in `PendingCommandBuffer`.
+- Storage bound enforcement (50 items max) and stale item pruning in `RecentTagsStore`.
+- First-class `Mood` tag support across networking and track models.
+- Technical documentation: added [v1.7.3 Milestone Report](docs/milestones/v1.7.3-milestone-report.md) detailing architecture, changes, and known issues.
+
+### Fixed
+- Fixed Room database main thread exception when tapping rating stars by removing blocking UI-thread DAO queries.
+- Fixed `IndexOutOfBoundsException` crash during rapid chip drag gestures by clamping release target indices and stabilizing layout tracking.
+- Fixed custom tag slot collision where adding unmatched fields (e.g. Moods) accidentally overwrote `custom1` (Instruments) by isolating unmapped fields in `dynamicTags`.
+- Fixed disappearing custom tags (`Mood`, `Instruments`) by implementing plural-tolerant field name matching (`name.trimEnd('s')`).
+- Fixed newly added or existing track chips remaining grey by checking active track tags and immediately confirming user edits.
+
 ## [1.7.2] - 2026-09-29
 ### Added
 - Two-tier autocomplete engine for custom metadata chips: quick suggestions up to user-configured limit plus instant real-time search across the entire library vocabulary (388+ genres).

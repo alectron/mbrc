@@ -70,4 +70,51 @@ class RecentTagsStoreTest {
     assertThat(store.getRecentTags("mood")).containsExactly("Happy")
     assertThat(store.getRecentTags("genre")).containsExactly("Electronic")
   }
+
+  @Test
+  fun `recordTagUsed enforces capacity ceiling of 50`() = runTest {
+    for (i in 1..60) {
+      store.recordTagUsed("genre", "Genre_$i")
+    }
+
+    val tags = store.getRecentTags("genre")
+    assertThat(tags).hasSize(50)
+    assertThat(tags.first()).isEqualTo("Genre_60")
+    assertThat(tags).doesNotContain("Genre_1")
+  }
+
+  @Test
+  fun `pruneStaleTags removes tags not present in active list`() = runTest {
+    store.recordTagUsed("genre", "Rock")
+    store.recordTagUsed("mood", "Chill")
+    store.recordTagUsed("instruments", "Guitar")
+
+    store.pruneStaleTags(setOf("genre", "mood"))
+
+    assertThat(store.getRecentTags("genre")).containsExactly("Rock")
+    assertThat(store.getRecentTags("mood")).containsExactly("Chill")
+    assertThat(store.getRecentTags("instruments")).isEmpty()
+  }
+
+  @Test
+  fun `clearTag removes specific tag history`() = runTest {
+    store.recordTagUsed("genre", "Rock")
+    store.recordTagUsed("mood", "Chill")
+
+    store.clearTag("genre")
+
+    assertThat(store.getRecentTags("genre")).isEmpty()
+    assertThat(store.getRecentTags("mood")).containsExactly("Chill")
+  }
+
+  @Test
+  fun `clearAll removes all recent tag records`() = runTest {
+    store.recordTagUsed("genre", "Rock")
+    store.recordTagUsed("mood", "Chill")
+
+    store.clearAll()
+
+    assertThat(store.getRecentTags("genre")).isEmpty()
+    assertThat(store.getRecentTags("mood")).isEmpty()
+  }
 }

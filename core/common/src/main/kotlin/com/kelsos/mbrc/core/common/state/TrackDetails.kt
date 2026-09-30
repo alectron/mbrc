@@ -21,6 +21,7 @@ data class TrackDetails(
   val composer: String = "",
   val comment: String = "",
   val encoder: String = "",
+  val mood: String = "",
 
   // File properties
   val kind: String = "",
@@ -52,7 +53,8 @@ data class TrackDetails(
   val custom13: String = "", val custom13Name: String = "",
   val custom14: String = "", val custom14Name: String = "",
   val custom15: String = "", val custom15Name: String = "",
-  val custom16: String = "", val custom16Name: String = ""
+  val custom16: String = "", val custom16Name: String = "",
+  val dynamicTags: Map<String, String> = emptyMap()
 ) {
   companion object {
     val EMPTY = TrackDetails()
@@ -87,6 +89,13 @@ data class TrackDetails(
         list.add(CustomTagEntry(slot = slot, name = displayName, value = value))
       }
     }
+    val knownSlots = pairs.map { it.first.lowercase() }.toSet()
+    val knownNames = pairs.map { it.second.lowercase() }.filter { it.isNotBlank() }.toSet()
+    for ((tagName, value) in dynamicTags) {
+      if (tagName.lowercase() !in knownSlots && tagName.lowercase() !in knownNames) {
+        list.add(CustomTagEntry(slot = tagName, name = tagName, value = value))
+      }
+    }
     return list
   }
 
@@ -95,18 +104,28 @@ data class TrackDetails(
    * or by slot name ("Custom1", "Custom2").
    */
   fun getTagValue(tagName: String): String {
-    if (tagName.equals("genre", ignoreCase = true)) return genre
+    if (tagName.equals("genre", ignoreCase = true) || tagName.equals("genres", ignoreCase = true)) return genre
     if (tagName.equals("albumartist", ignoreCase = true)) return albumArtist
     if (tagName.equals("composer", ignoreCase = true)) return composer
     if (tagName.equals("comment", ignoreCase = true)) return comment
-    if (tagName.equals("grouping", ignoreCase = true)) return grouping
-    if (tagName.equals("publisher", ignoreCase = true)) return publisher
+    if (tagName.equals("grouping", ignoreCase = true) || tagName.equals("groupings", ignoreCase = true)) return grouping
+    if (tagName.equals("publisher", ignoreCase = true) || tagName.equals("publishers", ignoreCase = true)) return publisher
+    if (tagName.equals("mood", ignoreCase = true) || tagName.equals("moods", ignoreCase = true)) return mood
+
+    val clean = tagName.trim().lowercase()
+    val cleanSingular = clean.trimEnd('s')
 
     for (entry in getAllCustomTags()) {
-      if (entry.name.equals(tagName, ignoreCase = true) || entry.slot.equals(tagName, ignoreCase = true)) {
+      val entryName = entry.name.trim().lowercase()
+      val entrySlot = entry.slot.trim().lowercase()
+      if (entryName == clean || entryName.trimEnd('s') == cleanSingular || entrySlot == clean) {
         return entry.value
       }
     }
+
+    val dynamicVal = dynamicTags[clean] ?: dynamicTags[cleanSingular] ?: dynamicTags[tagName.trim()]
+    if (dynamicVal != null) return dynamicVal
+
     return ""
   }
 
@@ -115,32 +134,42 @@ data class TrackDetails(
    * Used for instant optimistic updates before the server syncs.
    */
   fun withTagValue(tagName: String, value: String): TrackDetails {
-    if (tagName.equals("genre", ignoreCase = true)) return copy(genre = value)
+    if (tagName.equals("genre", ignoreCase = true) || tagName.equals("genres", ignoreCase = true)) return copy(genre = value)
     if (tagName.equals("albumartist", ignoreCase = true)) return copy(albumArtist = value)
     if (tagName.equals("composer", ignoreCase = true)) return copy(composer = value)
     if (tagName.equals("comment", ignoreCase = true)) return copy(comment = value)
-    if (tagName.equals("grouping", ignoreCase = true)) return copy(grouping = value)
-    if (tagName.equals("publisher", ignoreCase = true)) return copy(publisher = value)
+    if (tagName.equals("grouping", ignoreCase = true) || tagName.equals("groupings", ignoreCase = true)) return copy(grouping = value)
+    if (tagName.equals("publisher", ignoreCase = true) || tagName.equals("publishers", ignoreCase = true)) return copy(publisher = value)
+    if (tagName.equals("mood", ignoreCase = true) || tagName.equals("moods", ignoreCase = true)) return copy(mood = value)
 
-    if (custom1Name.equals(tagName, true) || tagName.equals("custom1", true)) return copy(custom1 = value)
-    if (custom2Name.equals(tagName, true) || tagName.equals("custom2", true)) return copy(custom2 = value)
-    if (custom3Name.equals(tagName, true) || tagName.equals("custom3", true)) return copy(custom3 = value)
-    if (custom4Name.equals(tagName, true) || tagName.equals("custom4", true)) return copy(custom4 = value)
-    if (custom5Name.equals(tagName, true) || tagName.equals("custom5", true)) return copy(custom5 = value)
-    if (custom6Name.equals(tagName, true) || tagName.equals("custom6", true)) return copy(custom6 = value)
-    if (custom7Name.equals(tagName, true) || tagName.equals("custom7", true)) return copy(custom7 = value)
-    if (custom8Name.equals(tagName, true) || tagName.equals("custom8", true)) return copy(custom8 = value)
-    if (custom9Name.equals(tagName, true) || tagName.equals("custom9", true)) return copy(custom9 = value)
-    if (custom10Name.equals(tagName, true) || tagName.equals("custom10", true)) return copy(custom10 = value)
-    if (custom11Name.equals(tagName, true) || tagName.equals("custom11", true)) return copy(custom11 = value)
-    if (custom12Name.equals(tagName, true) || tagName.equals("custom12", true)) return copy(custom12 = value)
-    if (custom13Name.equals(tagName, true) || tagName.equals("custom13", true)) return copy(custom13 = value)
-    if (custom14Name.equals(tagName, true) || tagName.equals("custom14", true)) return copy(custom14 = value)
-    if (custom15Name.equals(tagName, true) || tagName.equals("custom15", true)) return copy(custom15 = value)
-    if (custom16Name.equals(tagName, true) || tagName.equals("custom16", true)) return copy(custom16 = value)
+    val clean = tagName.trim().lowercase()
+    val cleanSingular = clean.trimEnd('s')
 
-    // Fallback: assign to custom1 if empty or unmatched
-    return copy(custom1 = value, custom1Name = if (custom1Name.isBlank()) tagName else custom1Name)
+    fun matches(slotName: String, slotKey: String): Boolean {
+      val name = slotName.trim().lowercase()
+      return name == clean || (cleanSingular.isNotEmpty() && name.trimEnd('s') == cleanSingular) || slotKey.lowercase() == clean
+    }
+
+    if (matches(custom1Name, "custom1")) return copy(custom1 = value)
+    if (matches(custom2Name, "custom2")) return copy(custom2 = value)
+    if (matches(custom3Name, "custom3")) return copy(custom3 = value)
+    if (matches(custom4Name, "custom4")) return copy(custom4 = value)
+    if (matches(custom5Name, "custom5")) return copy(custom5 = value)
+    if (matches(custom6Name, "custom6")) return copy(custom6 = value)
+    if (matches(custom7Name, "custom7")) return copy(custom7 = value)
+    if (matches(custom8Name, "custom8")) return copy(custom8 = value)
+    if (matches(custom9Name, "custom9")) return copy(custom9 = value)
+    if (matches(custom10Name, "custom10")) return copy(custom10 = value)
+    if (matches(custom11Name, "custom11")) return copy(custom11 = value)
+    if (matches(custom12Name, "custom12")) return copy(custom12 = value)
+    if (matches(custom13Name, "custom13")) return copy(custom13 = value)
+    if (matches(custom14Name, "custom14")) return copy(custom14 = value)
+    if (matches(custom15Name, "custom15")) return copy(custom15 = value)
+    if (matches(custom16Name, "custom16")) return copy(custom16 = value)
+
+    // Dynamic fallback: store in dynamicTags dictionary without corrupting custom slots
+    val updatedDynamic = dynamicTags + (clean to value)
+    return copy(dynamicTags = updatedDynamic)
   }
 
   /**

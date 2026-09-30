@@ -1,8 +1,15 @@
 package com.kelsos.mbrc.feature.playback.player.compose
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -12,12 +19,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.ThumbDown
@@ -41,15 +53,25 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kelsos.mbrc.core.common.settings.CustomTagFieldConfig
 import com.kelsos.mbrc.feature.playback.R
@@ -80,9 +102,22 @@ fun PlayerBottomSheet(
   val tagSuggestionLimit by viewModel.tagSuggestionLimit.collectAsStateWithLifecycle()
   val tagSuggestionsMap by viewModel.tagSuggestionsMap.collectAsStateWithLifecycle()
   val allTagValuesMap by viewModel.allTagValuesMap.collectAsStateWithLifecycle()
+  val tagClipboard by viewModel.tagClipboard.collectAsStateWithLifecycle()
+  val pendingReorders by viewModel.pendingReorders.collectAsStateWithLifecycle()
+
+  val handleDismiss = {
+    viewModel.commitAllPendingReorders()
+    onDismiss()
+  }
+
+  DisposableEffect(Unit) {
+    onDispose {
+      viewModel.commitAllPendingReorders()
+    }
+  }
 
   ModalBottomSheet(
-    onDismissRequest = onDismiss,
+    onDismissRequest = handleDismiss,
     sheetState = sheetState
   ) {
     Column(
@@ -97,7 +132,7 @@ fun PlayerBottomSheet(
         modifier = Modifier
           .fillMaxWidth()
           .clickable(onClick = {
-            onDismiss()
+            handleDismiss()
             onShowTrackDetails()
           })
           .padding(vertical = 12.dp),
@@ -122,7 +157,7 @@ fun PlayerBottomSheet(
           modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = {
-              onDismiss()
+              handleDismiss()
               onGoToAlbum()
             })
             .padding(vertical = 12.dp),
@@ -148,7 +183,7 @@ fun PlayerBottomSheet(
           modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = {
-              onDismiss()
+              handleDismiss()
               onGoToArtist()
             })
             .padding(vertical = 12.dp),
@@ -176,7 +211,7 @@ fun PlayerBottomSheet(
           .clickable(
             enabled = !isStream,
             onClick = {
-              onDismiss()
+              handleDismiss()
               onBanClick()
             }
           )
@@ -263,13 +298,21 @@ fun PlayerBottomSheet(
           val normalizedKey = config.tag.trim().lowercase()
           val quickSuggestions = tagSuggestionsMap[normalizedKey] ?: viewModel.getSuggestionsForTag(config.tag)
           val allValues = allTagValuesMap[normalizedKey] ?: viewModel.getAllValuesForTag(config.tag)
+          val hasClipboard = tagClipboard[normalizedKey] != null
+          val isReordered = pendingReorders.containsKey(normalizedKey)
           CustomTagFieldRow(
             config = config,
             currentValue = trackDetails.getTagValue(config.tag),
             onValueChange = { newValue -> viewModel.changeTag(config.tag, newValue) },
             quickSuggestions = quickSuggestions,
             allValues = allValues,
-            isTagConfirmed = { tag, value -> viewModel.isTagConfirmed(tag, value) }
+            isTagConfirmed = { tag, value -> viewModel.isTagConfirmed(tag, value) },
+            hasClipboard = hasClipboard,
+            onCopy = { values -> viewModel.copyTags(config.tag, values) },
+            onPaste = { viewModel.pasteTags(config.tag) },
+            hasPendingReorder = isReordered,
+            onPushReorder = { viewModel.commitPendingReorder(config.tag) },
+            onStageReorder = { newValues -> viewModel.stageReorder(config.tag, newValues) }
           )
           Spacer(modifier = Modifier.height(12.dp))
         }
@@ -286,72 +329,290 @@ private fun CustomTagFieldRow(
   onValueChange: (String) -> Unit,
   quickSuggestions: List<String>,
   allValues: List<String>,
-  isTagConfirmed: (String, String) -> Boolean
+  isTagConfirmed: (String, String) -> Boolean,
+  hasClipboard: Boolean = false,
+  onCopy: ((List<String>) -> Unit)? = null,
+  onPaste: (() -> Unit)? = null,
+  hasPendingReorder: Boolean = false,
+  onPushReorder: (() -> Unit)? = null,
+  onStageReorder: ((List<String>) -> Unit)? = null
 ) {
   var showAddDialog by remember { mutableStateOf(false) }
   var showEditDialog by remember { mutableStateOf(false) }
 
   Column(modifier = Modifier.fillMaxWidth()) {
-    Text(
-      text = config.tag,
-      style = MaterialTheme.typography.bodyMedium,
-      fontWeight = FontWeight.SemiBold,
-      color = MaterialTheme.colorScheme.onSurface
-    )
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+      ) {
+        Text(
+          text = config.tag,
+          style = MaterialTheme.typography.bodyMedium,
+          fontWeight = FontWeight.SemiBold,
+          color = MaterialTheme.colorScheme.onSurface
+        )
+
+        if (hasPendingReorder && onPushReorder != null) {
+          IconButton(
+            onClick = onPushReorder,
+            modifier = Modifier.size(24.dp)
+          ) {
+            Icon(
+              imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+              contentDescription = stringResource(R.string.custom_tags_push_order, config.tag),
+              tint = MaterialTheme.colorScheme.primary,
+              modifier = Modifier.size(16.dp)
+            )
+          }
+        }
+      }
+
+      if (config.isMultiValue) {
+        Row(
+          horizontalArrangement = Arrangement.spacedBy(4.dp),
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          if (hasClipboard && onPaste != null) {
+            IconButton(
+              onClick = onPaste,
+              modifier = Modifier.size(28.dp)
+            ) {
+              Icon(
+                imageVector = Icons.Default.ContentPaste,
+                contentDescription = stringResource(R.string.custom_tags_paste, config.tag),
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(16.dp)
+              )
+            }
+          }
+
+          val hasValues = currentValue.split(";").any { it.trim().isNotBlank() }
+          if (hasValues && onCopy != null) {
+            IconButton(
+              onClick = {
+                val list = currentValue.split(";").map { it.trim() }.filter { it.isNotBlank() }
+                onCopy(list)
+              },
+              modifier = Modifier.size(28.dp)
+            ) {
+              Icon(
+                imageVector = Icons.Default.ContentCopy,
+                contentDescription = stringResource(R.string.custom_tags_copy, config.tag),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp)
+              )
+            }
+          }
+        }
+      }
+    }
 
     Spacer(modifier = Modifier.height(6.dp))
 
     if (config.isMultiValue) {
-      val values = remember(currentValue) {
-        currentValue.split(";")
-          .map { it.trim() }
-          .filter { it.isNotEmpty() }
+      var localValues by remember(currentValue) {
+        mutableStateOf(
+          currentValue.split(";")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+        )
+      }
+
+      var draggingIndex by remember { mutableStateOf<Int?>(null) }
+      var hoverDropSlot by remember { mutableStateOf<Int?>(null) }
+      var dragOffset by remember { mutableStateOf(Offset.Zero) }
+      var flowRowCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+      val chipBounds = remember { mutableMapOf<Int, Rect>() }
+
+      LaunchedEffect(localValues) {
+        chipBounds.clear()
       }
 
       FlowRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+          .fillMaxWidth()
+          .onGloballyPositioned { flowRowCoordinates = it }
       ) {
-        values.forEach { tagItem ->
+        localValues.forEachIndexed { index, tagItem ->
           val isConfirmed = isTagConfirmed(config.tag, tagItem)
-          InputChip(
-            selected = true,
-            onClick = { /* keep selected */ },
-            label = { Text(tagItem) },
-            colors = InputChipDefaults.inputChipColors(
-              selectedContainerColor = if (isConfirmed) {
-                MaterialTheme.colorScheme.primaryContainer
-              } else {
-                MaterialTheme.colorScheme.surfaceVariant
-              },
-              selectedLabelColor = if (isConfirmed) {
-                MaterialTheme.colorScheme.onPrimaryContainer
-              } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
+          val isDragging = draggingIndex == index
+
+          // Drop gap expanding right before this chip
+          val isGapBefore = (hoverDropSlot == index && draggingIndex != null && draggingIndex != index && draggingIndex != index - 1)
+          val gapWidthBefore by animateDpAsState(
+            targetValue = if (isGapBefore) 52.dp else 0.dp,
+            animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+            label = "gap_before_$index"
+          )
+
+          if (gapWidthBefore > 0.dp) {
+            Box(
+              modifier = Modifier
+                .width(gapWidthBefore)
+                .height(32.dp)
+                .border(
+                  width = 1.5.dp,
+                  color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                  shape = RoundedCornerShape(16.dp)
+                )
+                .background(
+                  color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                  shape = RoundedCornerShape(16.dp)
+                )
+            )
+          }
+
+          Box(
+            modifier = Modifier
+              .zIndex(if (isDragging) 10f else 1f)
+              .graphicsLayer {
+                if (isDragging) {
+                  translationX = dragOffset.x
+                  translationY = dragOffset.y
+                  scaleX = 1.08f
+                  scaleY = 1.08f
+                  shadowElevation = 8.dp.toPx()
+                }
               }
-            ),
-            border = if (isConfirmed) {
-              null
-            } else {
-              InputChipDefaults.inputChipBorder(
-                enabled = true,
-                selected = true,
-                borderColor = MaterialTheme.colorScheme.outline
-              )
-            },
-            trailingIcon = {
-              Icon(
-                imageVector = Icons.Default.Clear,
-                contentDescription = stringResource(R.string.custom_tags_clear),
-                modifier = Modifier
-                  .size(16.dp)
-                  .clickable {
-                    val remaining = values.filterNot { it.equals(tagItem, ignoreCase = true) }
-                    onValueChange(remaining.joinToString("; "))
+              .onGloballyPositioned { coords ->
+                flowRowCoordinates?.let { parent ->
+                  val topLeft = parent.localPositionOf(coords, Offset.Zero)
+                  chipBounds[index] = Rect(
+                    topLeft,
+                    Size(coords.size.width.toFloat(), coords.size.height.toFloat())
+                  )
+                }
+              }
+              .pointerInput(localValues) {
+                detectDragGesturesAfterLongPress(
+                  onDragStart = {
+                    draggingIndex = index
+                    hoverDropSlot = null
+                    dragOffset = Offset.Zero
+                  },
+                  onDrag = { change, dragAmount ->
+                    change.consume()
+                    dragOffset += dragAmount
+                    val currentIdx = draggingIndex ?: return@detectDragGesturesAfterLongPress
+                    val currentRect = chipBounds[currentIdx] ?: return@detectDragGesturesAfterLongPress
+                    val pointerCenter = currentRect.center + dragOffset
+
+                    var candidateSlot: Int? = null
+                    for ((targetIdx, targetRect) in chipBounds) {
+                      if (targetRect.contains(pointerCenter)) {
+                        candidateSlot = if (pointerCenter.x < targetRect.center.x) {
+                          targetIdx
+                        } else {
+                          targetIdx + 1
+                        }
+                        break
+                      }
+                    }
+                    if (candidateSlot != null) {
+                      hoverDropSlot = candidateSlot.coerceIn(0, localValues.size)
+                    }
+                  },
+                  onDragEnd = {
+                    val fromIdx = draggingIndex
+                    val toSlot = hoverDropSlot
+                    draggingIndex = null
+                    hoverDropSlot = null
+                    dragOffset = Offset.Zero
+
+                    if (fromIdx != null && toSlot != null && fromIdx in 0 until localValues.size) {
+                      val targetIndex = (if (toSlot > fromIdx) toSlot - 1 else toSlot).coerceIn(0, localValues.size - 1)
+                      if (targetIndex != fromIdx) {
+                        val reordered = localValues.toMutableList()
+                        val item = reordered.removeAt(fromIdx)
+                        reordered.add(targetIndex, item)
+                        localValues = reordered
+
+                        if (onStageReorder != null) {
+                          onStageReorder(reordered)
+                        } else {
+                          onValueChange(reordered.joinToString("; "))
+                        }
+                      }
+                    }
+                  },
+                  onDragCancel = {
+                    draggingIndex = null
+                    hoverDropSlot = null
+                    dragOffset = Offset.Zero
                   }
+                )
+              }
+          ) {
+            InputChip(
+              selected = true,
+              onClick = { /* keep selected */ },
+              label = { Text(tagItem) },
+              colors = InputChipDefaults.inputChipColors(
+                selectedContainerColor = if (isConfirmed) {
+                  MaterialTheme.colorScheme.primaryContainer
+                } else {
+                  MaterialTheme.colorScheme.surfaceVariant
+                },
+                selectedLabelColor = if (isConfirmed) {
+                  MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                  MaterialTheme.colorScheme.onSurfaceVariant
+                }
+              ),
+              border = if (isConfirmed) {
+                null
+              } else {
+                InputChipDefaults.inputChipBorder(
+                  enabled = true,
+                  selected = true,
+                  borderColor = MaterialTheme.colorScheme.outline
+                )
+              },
+              trailingIcon = {
+                Icon(
+                  imageVector = Icons.Default.Clear,
+                  contentDescription = stringResource(R.string.custom_tags_clear),
+                  modifier = Modifier
+                    .size(16.dp)
+                    .clickable {
+                      val remaining = localValues.filterNot { it.equals(tagItem, ignoreCase = true) }
+                      localValues = remaining
+                      onValueChange(remaining.joinToString("; "))
+                    }
+                )
+              }
+            )
+          }
+        }
+
+        // Drop gap expanding after the last chip
+        val isGapAfterLast = (hoverDropSlot == localValues.size && draggingIndex != null && draggingIndex != localValues.size - 1)
+        val gapWidthAfter by animateDpAsState(
+          targetValue = if (isGapAfterLast) 52.dp else 0.dp,
+          animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+          label = "gap_after_last"
+        )
+        if (gapWidthAfter > 0.dp) {
+          Box(
+            modifier = Modifier
+              .width(gapWidthAfter)
+              .height(32.dp)
+              .border(
+                width = 1.5.dp,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                shape = RoundedCornerShape(16.dp)
               )
-            }
+              .background(
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                shape = RoundedCornerShape(16.dp)
+              )
           )
         }
 
@@ -375,7 +636,8 @@ private fun CustomTagFieldRow(
           allValues = allValues,
           isTagConfirmed = isTagConfirmed,
           onAdd = { newTag ->
-            val updated = (values + newTag).distinct()
+            val updated = (localValues + newTag).distinct()
+            localValues = updated
             onValueChange(updated.joinToString("; "))
             showAddDialog = false
           },

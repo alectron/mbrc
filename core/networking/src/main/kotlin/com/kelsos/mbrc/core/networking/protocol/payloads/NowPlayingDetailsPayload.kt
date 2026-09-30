@@ -35,6 +35,8 @@ data class NowPlayingDetailsPayload(
   val comment: String = "",
   @Json(name = "encoder")
   val encoder: String = "",
+  @Json(name = "mood")
+  val mood: String = "",
 
   // File properties
   @Json(name = "kind")
@@ -111,6 +113,7 @@ data class NowPlayingDetailsPayload(
     composer = composer,
     comment = comment,
     encoder = encoder,
+    mood = mood,
     kind = kind,
     format = format,
     size = size,
