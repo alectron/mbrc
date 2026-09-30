@@ -95,7 +95,8 @@ data class NowPlayingDetailsPayload(
   @Json(name = "custom15") val custom15: String = "",
   @Json(name = "custom15Name") val custom15Name: String = "",
   @Json(name = "custom16") val custom16: String = "",
-  @Json(name = "custom16Name") val custom16Name: String = ""
+  @Json(name = "custom16Name") val custom16Name: String = "",
+  @Json(name = "tags") val tags: Map<String, String> = emptyMap()
 ) {
   /**
    * Converts this payload to a [TrackDetails] domain model.
@@ -141,6 +142,7 @@ data class NowPlayingDetailsPayload(
     custom13 = custom13, custom13Name = custom13Name,
     custom14 = custom14, custom14Name = custom14Name,
     custom15 = custom15, custom15Name = custom15Name,
-    custom16 = custom16, custom16Name = custom16Name
+    custom16 = custom16, custom16Name = custom16Name,
+    dynamicTags = tags
   )
 }

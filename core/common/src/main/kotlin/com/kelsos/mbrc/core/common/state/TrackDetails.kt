@@ -118,13 +118,17 @@ data class TrackDetails(
     for (entry in getAllCustomTags()) {
       val entryName = entry.name.trim().lowercase()
       val entrySlot = entry.slot.trim().lowercase()
-      if (entryName == clean || entryName.trimEnd('s') == cleanSingular || entrySlot == clean) {
+      if (entryName == clean || (cleanSingular.isNotEmpty() && entryName.trimEnd('s') == cleanSingular) || entrySlot == clean) {
         return entry.value
       }
     }
 
-    val dynamicVal = dynamicTags[clean] ?: dynamicTags[cleanSingular] ?: dynamicTags[tagName.trim()]
-    if (dynamicVal != null) return dynamicVal
+    for ((k, v) in dynamicTags) {
+      val kClean = k.trim().lowercase()
+      if (kClean == clean || (cleanSingular.isNotEmpty() && kClean.trimEnd('s') == cleanSingular)) {
+        return v
+      }
+    }
 
     return ""
   }
@@ -168,7 +172,12 @@ data class TrackDetails(
     if (matches(custom16Name, "custom16")) return copy(custom16 = value)
 
     // Dynamic fallback: store in dynamicTags dictionary without corrupting custom slots
-    val updatedDynamic = dynamicTags + (clean to value)
+    val updatedDynamic = dynamicTags.toMutableMap()
+    val matchedKey = updatedDynamic.keys.firstOrNull { key ->
+      val kClean = key.trim().lowercase()
+      kClean == clean || (cleanSingular.isNotEmpty() && kClean.trimEnd('s') == cleanSingular)
+    } ?: tagName.trim()
+    updatedDynamic[matchedKey] = value
     return copy(dynamicTags = updatedDynamic)
   }
 

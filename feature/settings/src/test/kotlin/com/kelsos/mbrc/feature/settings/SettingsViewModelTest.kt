@@ -382,6 +382,20 @@ class SettingsViewModelTest : KoinTest {
   }
 
   @Test
+  fun `toggleCustomTagFieldLock should toggle locked state and call setCustomTagFields`() = runTest(testDispatcher) {
+    viewModel.toggleCustomTagFieldLock(0)
+    advanceUntilIdle()
+
+    coVerify {
+      settingsManager.setCustomTagFields(
+        match { list ->
+          list[0].tag == "Energy" && list[0].isLocked
+        }
+      )
+    }
+  }
+
+  @Test
   fun `setTagSuggestionLimit should call settingsManager setTagSuggestionLimit`() = runTest(testDispatcher) {
     viewModel.setTagSuggestionLimit(16)
     advanceUntilIdle()

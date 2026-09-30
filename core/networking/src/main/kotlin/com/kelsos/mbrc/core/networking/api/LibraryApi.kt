@@ -26,4 +26,5 @@ interface LibraryApi {
   ): Flow<ResponseWithPayload<AlbumCoverDto, CoverDto>>
 
   suspend fun browseTagValues(tags: List<String>): BrowseTagValuesResponse
+  suspend fun getAvailableTagFields(): com.kelsos.mbrc.core.networking.dto.AvailableTagFieldsResponse
 }

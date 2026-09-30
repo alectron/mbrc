@@ -114,4 +114,9 @@
   <string name="custom_tags_paste">Paste %1$s tags</string>
   <string name="custom_tags_drag_reorder">Drag to reorder</string>
   <string name="custom_tags_push_order">Push reordered %1$s to file</string>
+  <string name="custom_tags_locked">Tag field is locked</string>
+  <string name="custom_tags_suggestions_mode">Suggestions</string>
+  <string name="custom_tags_all_mode">All tags</string>
+  <string name="custom_tags_sort_az">Sort A to Z</string>
+  <string name="custom_tags_sort_za">Sort Z to A</string>
 </resources>

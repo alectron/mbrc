@@ -3,11 +3,16 @@ package com.kelsos.mbrc.feature.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kelsos.mbrc.core.common.settings.CustomTagFieldConfig
+import com.kelsos.mbrc.core.common.settings.NumericScaleConfig
+import com.kelsos.mbrc.core.common.settings.TagDisplayType
 import com.kelsos.mbrc.core.common.settings.TrackAction
+import com.kelsos.mbrc.core.networking.api.LibraryApi
+import com.kelsos.mbrc.core.networking.dto.AvailableTagFieldEntryDto
 import com.kelsos.mbrc.core.platform.service.ServiceRestarter
 import com.kelsos.mbrc.feature.settings.data.CallAction
 import com.kelsos.mbrc.feature.settings.data.KeepScreenOn
 import com.kelsos.mbrc.feature.settings.domain.SettingsManager
+import com.kelsos.mbrc.feature.settings.domain.TagMetadataSyncUseCase
 import com.kelsos.mbrc.feature.settings.theme.Theme
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -15,8 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-
-import com.kelsos.mbrc.feature.settings.domain.TagMetadataSyncUseCase
+import timber.log.Timber
 
 /**
  * Types of dialogs that can be shown in the Settings Screen.
@@ -44,7 +48,8 @@ sealed class TagSyncState {
 class SettingsViewModel(
   private val settingsManager: SettingsManager,
   private val serviceRestarter: ServiceRestarter,
-  private val tagMetadataSyncUseCase: TagMetadataSyncUseCase? = null
+  private val tagMetadataSyncUseCase: TagMetadataSyncUseCase? = null,
+  private val libraryApi: LibraryApi? = null
 ) : ViewModel() {
 
   // State flows from settings manager
@@ -83,6 +88,22 @@ class SettingsViewModel(
 
   private val _tagSyncState = MutableStateFlow<TagSyncState>(TagSyncState.Idle)
   val tagSyncState: StateFlow<TagSyncState> = _tagSyncState.asStateFlow()
+
+  private val _availableTagFields = MutableStateFlow<List<AvailableTagFieldEntryDto>>(emptyList())
+  val availableTagFields: StateFlow<List<AvailableTagFieldEntryDto>> = _availableTagFields.asStateFlow()
+
+  fun loadAvailableTagFields() {
+    viewModelScope.launch {
+      try {
+        val result = libraryApi?.getAvailableTagFields()
+        if (result != null && result.fields.isNotEmpty()) {
+          _availableTagFields.value = result.fields
+        }
+      } catch (e: Exception) {
+        Timber.w(e, "Could not load available tag fields from MusicBee")
+      }
+    }
+  }
 
   // Dialog state
   private val _visibleDialog = MutableStateFlow<SettingsDialogType?>(null)
@@ -174,15 +195,30 @@ class SettingsViewModel(
   }
 
   /**
-   * Adds a new custom tag field if not already present.
+   * Adds a new custom tag field with full configuration.
    */
-  fun addCustomTagField(tag: String, isMultiValue: Boolean) {
-    val trimmed = tag.trim()
+  fun addCustomTagField(config: CustomTagFieldConfig) {
+    val trimmed = config.tag.trim()
     if (trimmed.isEmpty()) return
     val current = customTagFields.value
     if (current.any { it.tag.equals(trimmed, ignoreCase = true) }) return
-    val updated = current + CustomTagFieldConfig(tag = trimmed, isMultiValue = isMultiValue, isEnabled = true)
+    val updated = current + config.copy(tag = trimmed)
     updateCustomTagFields(updated)
+  }
+
+  /**
+   * Adds a new custom tag field if not already present.
+   */
+  fun addCustomTagField(tag: String, isMultiValue: Boolean) {
+    addCustomTagField(
+      CustomTagFieldConfig(
+        tag = tag,
+        isMultiValue = isMultiValue,
+        isEnabled = true,
+        isLocked = false,
+        displayType = if (isMultiValue) TagDisplayType.MULTI_CHIPS else TagDisplayType.DISCRETE_BUTTONS
+      )
+    )
   }
 
   /**
@@ -204,6 +240,41 @@ class SettingsViewModel(
     if (index in current.indices) {
       val item = current[index]
       current[index] = item.copy(isEnabled = !item.isEnabled)
+      updateCustomTagFields(current)
+    }
+  }
+
+  /**
+   * Toggles the read-only locked state of a custom tag field at the given index.
+   */
+  fun toggleCustomTagFieldLock(index: Int) {
+    val current = customTagFields.value.toMutableList()
+    if (index in current.indices) {
+      val item = current[index]
+      current[index] = item.copy(isLocked = !item.isLocked)
+      updateCustomTagFields(current)
+    }
+  }
+
+  /**
+   * Moves a custom tag field from one position to another in the list.
+   */
+  fun moveCustomTagField(fromIndex: Int, toIndex: Int) {
+    val current = customTagFields.value.toMutableList()
+    if (fromIndex in current.indices && toIndex in current.indices && fromIndex != toIndex) {
+      val item = current.removeAt(fromIndex)
+      current.add(toIndex, item)
+      updateCustomTagFields(current)
+    }
+  }
+
+  /**
+   * Updates an existing custom tag field configuration at the given index.
+   */
+  fun updateCustomTagField(index: Int, config: CustomTagFieldConfig) {
+    val current = customTagFields.value.toMutableList()
+    if (index in current.indices) {
+      current[index] = config
       updateCustomTagFields(current)
     }
   }
@@ -239,6 +310,9 @@ class SettingsViewModel(
    */
   fun showDialog(dialogType: SettingsDialogType) {
     _visibleDialog.value = dialogType
+    if (dialogType == SettingsDialogType.AddCustomTagField) {
+      loadAvailableTagFields()
+    }
   }
 
   /**

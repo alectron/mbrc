@@ -122,3 +122,20 @@ data class BrowseTagValuesResponse(
 ) {
   val allEntries: List<TagValuesEntryDto> get() = entries.ifEmpty { results }
 }
+
+@JsonClass(generateAdapter = true)
+data class AvailableTagFieldEntryDto(
+  @Json(name = "name")
+  val name: String = "",
+  @Json(name = "slot")
+  val slot: String = "",
+  @Json(name = "is_custom")
+  val isCustom: Boolean = false
+)
+
+@JsonClass(generateAdapter = true)
+data class AvailableTagFieldsResponse(
+  @Json(name = "fields")
+  val fields: List<AvailableTagFieldEntryDto> = emptyList()
+)
+

@@ -1,6 +1,19 @@
 Changelog
 -----------
 
+## [1.7.4] - 2026-09-30
+### Added
+- Generic metadata tag architecture across network wire protocol, data models, and Compose UI, retiring hardcoded field pipelines.
+- Configurable single-value modalities: Multi-Value Chips, Discrete Buttons, Continuous Slider, or Freeform Single-Value Text with user-definable scales or arbitrary value lists (e.g. 16, 32, 64, 128). Defaults initialized to `0..10`, step 1.
+- Overflow Settings Cog (⚙) menu for each custom tag entry: Lock/Unlock, Move Up, Move Down, Edit Modality & Scale, and Delete Field.
+- Clean settings row layout with standalone delete button removed so the enable toggle switch sits flush on the right edge.
+- Custom tag field re-ordering via Move Up / Move Down in Settings, dictating display order on the playback rating sheet.
+- Collapsible "Available in MusicBee" suggestions drawer in Add Tag Field dialog with interactive orange `?` activity button and vertically scrollable container.
+- Dynamic taxonomy access for standard MusicBee fields (`Artist`, `Album`, `Album Artist`, `Title`, `Year`, `Mood`, `Occasion`, `BPM`, etc.) and custom slots (`Custom1`..`Custom16`).
+- Read-only tag protection: locked fields display a lock icon, muted disabled colors, and suppress all edit/drag interactions on the playback sheet.
+- Dual-mode "Add Tag" discovery dialog: Star (★) mode for quick suggestions and Plus (✚) mode for full library taxonomy exploration with A-Z / Z-A sort order toggle.
+- Technical documentation: added [v1.7.4 Milestone Report](docs/milestones/v1.7.4-milestone-report.md) detailing architecture, changes, and deployment status.
+
 ## [1.7.3] - 2026-09-30
 ### Added
 - Chip reordering via long-press drag and drop with expanding gap micro-animation and explicit push (`->`) commit button.

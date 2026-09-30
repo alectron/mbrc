@@ -7,24 +7,38 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -32,6 +46,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SuggestionChip
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -44,6 +60,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
@@ -53,6 +70,9 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kelsos.mbrc.core.common.settings.CustomTagFieldConfig
+import com.kelsos.mbrc.core.common.settings.NumericScaleConfig
+import com.kelsos.mbrc.core.common.settings.TagDisplayType
+import com.kelsos.mbrc.core.networking.dto.AvailableTagFieldEntryDto
 import com.kelsos.mbrc.core.common.settings.TrackAction
 import com.kelsos.mbrc.core.common.utilities.AppInfo
 import com.kelsos.mbrc.core.platform.service.ServiceRestarter
@@ -95,6 +115,7 @@ data class SettingsContentState(
   val halfStarRatingEnabled: Boolean = true,
   val showRatingOnPlayerEnabled: Boolean = false,
   val customTagFields: List<CustomTagFieldConfig> = CustomTagFieldConfig.DEFAULT_TAGS,
+  val availableTagFields: List<AvailableTagFieldEntryDto> = emptyList(),
   val tagSuggestionLimit: Int = 8,
   val tagSyncState: TagSyncState = TagSyncState.Idle,
   val cachedTagCount: Int = 0,
@@ -120,8 +141,12 @@ interface ISettingsActions {
   val onTrackDefaultActionSelected: (TrackAction) -> Unit
   val onAddCustomTagFieldClick: () -> Unit get() = {}
   val onCustomTagFieldAdded: (String, Boolean) -> Unit get() = { _, _ -> }
+  val onCustomTagFieldConfigAdded: (CustomTagFieldConfig) -> Unit get() = {}
   val onCustomTagFieldRemoved: (Int) -> Unit get() = {}
   val onCustomTagFieldToggled: (Int) -> Unit get() = {}
+  val onCustomTagFieldLockToggled: (Int) -> Unit get() = {}
+  val onCustomTagFieldMoved: (fromIndex: Int, toIndex: Int) -> Unit get() = { _, _ -> }
+  val onCustomTagFieldConfigUpdated: (index: Int, config: CustomTagFieldConfig) -> Unit get() = { _, _ -> }
   val onSyncTagsClick: () -> Unit get() = {}
   val onSuggestionLimitClick: () -> Unit get() = {}
   val onSuggestionLimitSelected: (Int) -> Unit get() = {}
@@ -148,8 +173,12 @@ object EmptySettingsActions : ISettingsActions {
   override val onTrackDefaultActionSelected: (TrackAction) -> Unit = {}
   override val onAddCustomTagFieldClick: () -> Unit = {}
   override val onCustomTagFieldAdded: (String, Boolean) -> Unit = { _, _ -> }
+  override val onCustomTagFieldConfigAdded: (CustomTagFieldConfig) -> Unit = {}
   override val onCustomTagFieldRemoved: (Int) -> Unit = {}
   override val onCustomTagFieldToggled: (Int) -> Unit = {}
+  override val onCustomTagFieldLockToggled: (Int) -> Unit = {}
+  override val onCustomTagFieldMoved: (fromIndex: Int, toIndex: Int) -> Unit = { _, _ -> }
+  override val onCustomTagFieldConfigUpdated: (index: Int, config: CustomTagFieldConfig) -> Unit = { _, _ -> }
   override val onSyncTagsClick: () -> Unit = {}
   override val onSuggestionLimitClick: () -> Unit = {}
   override val onSuggestionLimitSelected: (Int) -> Unit = {}
@@ -524,6 +553,9 @@ fun SettingsScreenContent(
         cachedTagCount = state.cachedTagCount,
         onAddTagClick = actions.onAddCustomTagFieldClick,
         onToggleTag = actions.onCustomTagFieldToggled,
+        onToggleLock = actions.onCustomTagFieldLockToggled,
+        onMoveTag = actions.onCustomTagFieldMoved,
+        onUpdateTagConfig = actions.onCustomTagFieldConfigUpdated,
         onRemoveTag = actions.onCustomTagFieldRemoved,
         onSyncTagsClick = actions.onSyncTagsClick,
         onSuggestionLimitClick = actions.onSuggestionLimitClick
@@ -587,8 +619,10 @@ fun SettingsScreenContent(
     )
 
     SettingsDialogType.AddCustomTagField -> AddCustomTagFieldDialog(
-      onTagAdded = { name, isMulti ->
-        actions.onCustomTagFieldAdded(name, isMulti)
+      availableFields = state.availableTagFields,
+      onTagAdded = { config ->
+        actions.onCustomTagFieldConfigAdded(config)
+        actions.onCustomTagFieldAdded(config.tag, config.isMulti)
         actions.onDismissDialog()
       },
       onDismiss = actions.onDismissDialog
@@ -700,6 +734,7 @@ private fun RatingContentSection(
 @Composable
 private fun CustomTagsSettingsSection(viewModel: SettingsViewModel) {
   val customTagFields by viewModel.customTagFields.collectAsStateWithLifecycle()
+  val availableTagFields by viewModel.availableTagFields.collectAsStateWithLifecycle()
   val tagSuggestionLimit by viewModel.tagSuggestionLimit.collectAsStateWithLifecycle()
   val tagSyncState by viewModel.tagSyncState.collectAsStateWithLifecycle()
   val cachedTagCount by viewModel.cachedTagCount.collectAsStateWithLifecycle()
@@ -712,6 +747,9 @@ private fun CustomTagsSettingsSection(viewModel: SettingsViewModel) {
     cachedTagCount = cachedTagCount,
     onAddTagClick = { viewModel.showDialog(SettingsDialogType.AddCustomTagField) },
     onToggleTag = { index -> viewModel.toggleCustomTagField(index) },
+    onToggleLock = { index -> viewModel.toggleCustomTagFieldLock(index) },
+    onMoveTag = { from, to -> viewModel.moveCustomTagField(from, to) },
+    onUpdateTagConfig = { index, config -> viewModel.updateCustomTagField(index, config) },
     onRemoveTag = { index -> viewModel.removeCustomTagField(index) },
     onSyncTagsClick = { viewModel.syncTagMetadata() },
     onSuggestionLimitClick = { viewModel.showDialog(SettingsDialogType.TagSuggestionLimit) }
@@ -719,8 +757,9 @@ private fun CustomTagsSettingsSection(viewModel: SettingsViewModel) {
 
   if (visibleDialog == SettingsDialogType.AddCustomTagField) {
     AddCustomTagFieldDialog(
-      onTagAdded = { name, isMulti ->
-        viewModel.addCustomTagField(name, isMulti)
+      availableFields = availableTagFields,
+      onTagAdded = { config ->
+        viewModel.addCustomTagField(config)
         viewModel.hideDialog()
       },
       onDismiss = { viewModel.hideDialog() }
@@ -750,10 +789,15 @@ internal fun CustomTagsContentSection(
   cachedTagCount: Int = 0,
   onAddTagClick: () -> Unit,
   onToggleTag: (Int) -> Unit,
+  onToggleLock: (Int) -> Unit = {},
+  onMoveTag: (fromIndex: Int, toIndex: Int) -> Unit = { _, _ -> },
+  onUpdateTagConfig: (index: Int, config: CustomTagFieldConfig) -> Unit = { _, _ -> },
   onRemoveTag: (Int) -> Unit,
   onSyncTagsClick: () -> Unit = {},
   onSuggestionLimitClick: () -> Unit = {}
 ) {
+  var editingIndex by remember { mutableStateOf<Int?>(null) }
+
   SettingsSection(title = stringResource(R.string.settings_custom_tag_fields)) {
     if (customTagFields.isEmpty()) {
       Text(
@@ -766,8 +810,27 @@ internal fun CustomTagsContentSection(
       customTagFields.forEachIndexed { index, config ->
         CustomTagFieldItem(
           config = config,
+          isFirst = index == 0,
+          isLast = index == customTagFields.size - 1,
           onToggle = { onToggleTag(index) },
+          onToggleLock = { onToggleLock(index) },
+          onMoveUp = { onMoveTag(index, index - 1) },
+          onMoveDown = { onMoveTag(index, index + 1) },
+          onEdit = { editingIndex = index },
           onDelete = { onRemoveTag(index) }
+        )
+      }
+    }
+
+    editingIndex?.let { idx ->
+      if (idx in customTagFields.indices) {
+        EditCustomTagFieldDialog(
+          config = customTagFields[idx],
+          onSave = { updated ->
+            onUpdateTagConfig(idx, updated)
+            editingIndex = null
+          },
+          onDismiss = { editingIndex = null }
         )
       }
     }
@@ -835,9 +898,17 @@ private fun TagSuggestionLimitDialog(
 @Composable
 private fun CustomTagFieldItem(
   config: CustomTagFieldConfig,
+  isFirst: Boolean,
+  isLast: Boolean,
   onToggle: () -> Unit,
+  onToggleLock: () -> Unit,
+  onMoveUp: () -> Unit,
+  onMoveDown: () -> Unit,
+  onEdit: () -> Unit,
   onDelete: () -> Unit
 ) {
+  var menuExpanded by remember { mutableStateOf(false) }
+
   Row(
     modifier = Modifier
       .fillMaxWidth()
@@ -845,76 +916,373 @@ private fun CustomTagFieldItem(
     verticalAlignment = Alignment.CenterVertically
   ) {
     Column(modifier = Modifier.weight(1f)) {
-      Text(
-        text = config.tag,
-        style = MaterialTheme.typography.titleMedium
-      )
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+          text = config.tag,
+          style = MaterialTheme.typography.titleMedium
+        )
+        if (config.isLocked) {
+          Spacer(modifier = Modifier.width(6.dp))
+          Icon(
+            imageVector = Icons.Filled.Lock,
+            contentDescription = "Locked (Read-Only)",
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(16.dp)
+          )
+        }
+      }
       Spacer(modifier = Modifier.height(2.dp))
+      val modalityDesc = when (config.displayType) {
+        TagDisplayType.MULTI_CHIPS -> stringResource(R.string.settings_custom_tags_multi_value)
+        TagDisplayType.DISCRETE_BUTTONS -> {
+          if (config.numericScale.customValues.isNotEmpty()) {
+            "Buttons: " + config.numericScale.customValues.joinToString(", ")
+          } else {
+            "Buttons: ${config.numericScale.min}..${config.numericScale.max}"
+          }
+        }
+        TagDisplayType.SLIDER -> "Slider: ${config.numericScale.min}..${config.numericScale.max} (step ${config.numericScale.step})"
+        TagDisplayType.TEXT -> "Text"
+      }
       Text(
-        text = if (config.isMultiValue) {
-          stringResource(R.string.settings_custom_tags_multi_value)
-        } else {
-          stringResource(R.string.settings_custom_tags_single_value)
-        },
+        text = modalityDesc,
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant
       )
     }
 
+    Box {
+      IconButton(
+        onClick = { menuExpanded = true },
+        modifier = Modifier.size(40.dp)
+      ) {
+        Icon(
+          imageVector = Icons.Default.Settings,
+          contentDescription = "Tag Options",
+          tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+      }
+
+      DropdownMenu(
+        expanded = menuExpanded,
+        onDismissRequest = { menuExpanded = false }
+      ) {
+        // 1. Lock / Unlock
+        DropdownMenuItem(
+          text = {
+            Text(if (config.isLocked) "Unlock (Editable)" else "Lock (Read-Only)")
+          },
+          leadingIcon = {
+            Icon(
+              imageVector = if (config.isLocked) Icons.Outlined.LockOpen else Icons.Filled.Lock,
+              contentDescription = null,
+              tint = if (config.isLocked) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary
+            )
+          },
+          onClick = {
+            menuExpanded = false
+            onToggleLock()
+          }
+        )
+
+        // 2. Move Up
+        DropdownMenuItem(
+          text = { Text("Move Up") },
+          leadingIcon = {
+            Icon(
+              imageVector = Icons.Default.ArrowUpward,
+              contentDescription = null
+            )
+          },
+          enabled = !isFirst,
+          onClick = {
+            menuExpanded = false
+            onMoveUp()
+          }
+        )
+
+        // 3. Move Down
+        DropdownMenuItem(
+          text = { Text("Move Down") },
+          leadingIcon = {
+            Icon(
+              imageVector = Icons.Default.ArrowDownward,
+              contentDescription = null
+            )
+          },
+          enabled = !isLast,
+          onClick = {
+            menuExpanded = false
+            onMoveDown()
+          }
+        )
+
+        // 4. Edit Modality & Scale
+        DropdownMenuItem(
+          text = { Text("Edit Modality & Scale") },
+          leadingIcon = {
+            Icon(
+              imageVector = Icons.Default.Tune,
+              contentDescription = null
+            )
+          },
+          onClick = {
+            menuExpanded = false
+            onEdit()
+          }
+        )
+
+        // 5. Delete Field
+        DropdownMenuItem(
+          text = {
+            Text(
+              text = stringResource(R.string.connection_manager_delete),
+              color = MaterialTheme.colorScheme.error
+            )
+          },
+          leadingIcon = {
+            Icon(
+              imageVector = Icons.Default.Delete,
+              contentDescription = null,
+              tint = MaterialTheme.colorScheme.error
+            )
+          },
+          onClick = {
+            menuExpanded = false
+            onDelete()
+          }
+        )
+      }
+    }
+
+    Spacer(modifier = Modifier.width(4.dp))
+
     Switch(
       checked = config.isEnabled,
       onCheckedChange = { onToggle() }
     )
-
-    Spacer(modifier = Modifier.width(8.dp))
-
-    IconButton(onClick = onDelete) {
-      Icon(
-        imageVector = Icons.Filled.Delete,
-        contentDescription = stringResource(R.string.connection_manager_delete),
-        tint = MaterialTheme.colorScheme.onSurfaceVariant
-      )
-    }
   }
 }
 
 @Composable
-private fun AddCustomTagFieldDialog(
-  onTagAdded: (String, Boolean) -> Unit,
+private fun EditCustomTagFieldDialog(
+  config: CustomTagFieldConfig,
+  onSave: (CustomTagFieldConfig) -> Unit,
   onDismiss: () -> Unit
 ) {
-  var tagName by remember { mutableStateOf("") }
-  var isMultiValue by remember { mutableStateOf(false) }
+  var displayType by remember { mutableStateOf(config.displayType) }
+  var isLocked by remember { mutableStateOf(config.isLocked) }
+
+  var minVal by remember { mutableStateOf(config.numericScale.min.toString()) }
+  var maxVal by remember { mutableStateOf(config.numericScale.max.toString()) }
+  var stepVal by remember { mutableStateOf(config.numericScale.step.toString()) }
+  var customValuesText by remember { mutableStateOf(config.numericScale.customValues.joinToString(", ")) }
+  var useDiscreteCustomList by remember { mutableStateOf(config.numericScale.customValues.isNotEmpty()) }
 
   AlertDialog(
     onDismissRequest = onDismiss,
-    title = { Text(stringResource(R.string.settings_custom_tags_add_title)) },
+    title = { Text("Edit ${config.tag}") },
     text = {
-      Column(modifier = Modifier.fillMaxWidth()) {
-        OutlinedTextField(
-          value = tagName,
-          onValueChange = { tagName = it },
-          label = { Text(stringResource(R.string.settings_custom_tags_name_label)) },
-          singleLine = true,
-          modifier = Modifier.fillMaxWidth()
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .verticalScroll(rememberScrollState())
+      ) {
+        Text(
+          text = "Modality / Input Type:",
+          style = MaterialTheme.typography.titleSmall
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Column(modifier = Modifier.selectableGroup()) {
+          // 1. Multi-Value Chips
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .selectable(
+                selected = displayType == TagDisplayType.MULTI_CHIPS,
+                onClick = { displayType = TagDisplayType.MULTI_CHIPS },
+                role = Role.RadioButton
+              )
+              .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            RadioButton(
+              selected = displayType == TagDisplayType.MULTI_CHIPS,
+              onClick = null
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+              Text("Multi-Value Chips", style = MaterialTheme.typography.bodyMedium)
+              Text("Comma/semicolon list of tag chips", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+          }
+
+          // 2. Discrete Buttons
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .selectable(
+                selected = displayType == TagDisplayType.DISCRETE_BUTTONS,
+                onClick = { displayType = TagDisplayType.DISCRETE_BUTTONS },
+                role = Role.RadioButton
+              )
+              .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            RadioButton(
+              selected = displayType == TagDisplayType.DISCRETE_BUTTONS,
+              onClick = null
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+              Text("Discrete Buttons", style = MaterialTheme.typography.bodyMedium)
+              Text("Clickable number buttons (e.g. 0-10 or custom scale)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+          }
+
+          if (displayType == TagDisplayType.DISCRETE_BUTTONS) {
+            Column(modifier = Modifier.padding(start = 32.dp, top = 4.dp, bottom = 4.dp)) {
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(
+                  checked = useDiscreteCustomList,
+                  onCheckedChange = { useDiscreteCustomList = it }
+                )
+                Text("Custom values list", style = MaterialTheme.typography.bodySmall)
+              }
+
+              if (useDiscreteCustomList) {
+                OutlinedTextField(
+                  value = customValuesText,
+                  onValueChange = { customValuesText = it },
+                  label = { Text("Values (comma-separated)") },
+                  placeholder = { Text("e.g. 16, 32, 64, 128") },
+                  singleLine = true,
+                  modifier = Modifier.fillMaxWidth()
+                )
+              } else {
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                  OutlinedTextField(
+                    value = minVal,
+                    onValueChange = { minVal = it },
+                    label = { Text("Min") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                  )
+                  OutlinedTextField(
+                    value = maxVal,
+                    onValueChange = { maxVal = it },
+                    label = { Text("Max") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                  )
+                  OutlinedTextField(
+                    value = stepVal,
+                    onValueChange = { stepVal = it },
+                    label = { Text("Step") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                  )
+                }
+              }
+            }
+          }
+
+          // 3. Slider
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .selectable(
+                selected = displayType == TagDisplayType.SLIDER,
+                onClick = { displayType = TagDisplayType.SLIDER },
+                role = Role.RadioButton
+              )
+              .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            RadioButton(
+              selected = displayType == TagDisplayType.SLIDER,
+              onClick = null
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+              Text("Continuous Slider", style = MaterialTheme.typography.bodyMedium)
+              Text("Draggable numerical slider", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+          }
+
+          if (displayType == TagDisplayType.SLIDER) {
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 32.dp, top = 4.dp, bottom = 4.dp),
+              horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+              OutlinedTextField(
+                value = minVal,
+                onValueChange = { minVal = it },
+                label = { Text("Min") },
+                singleLine = true,
+                modifier = Modifier.weight(1f)
+              )
+              OutlinedTextField(
+                value = maxVal,
+                onValueChange = { maxVal = it },
+                label = { Text("Max") },
+                singleLine = true,
+                modifier = Modifier.weight(1f)
+              )
+              OutlinedTextField(
+                value = stepVal,
+                onValueChange = { stepVal = it },
+                label = { Text("Step") },
+                singleLine = true,
+                modifier = Modifier.weight(1f)
+              )
+            }
+          }
+
+          // 4. Freeform Text
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .selectable(
+                selected = displayType == TagDisplayType.TEXT,
+                onClick = { displayType = TagDisplayType.TEXT },
+                role = Role.RadioButton
+              )
+              .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            RadioButton(
+              selected = displayType == TagDisplayType.TEXT,
+              onClick = null
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+              Text("Freeform Text", style = MaterialTheme.typography.bodyMedium)
+              Text("Single value text input", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+          }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
 
         Row(
-          modifier = Modifier
-            .fillMaxWidth()
-            .clickable { isMultiValue = !isMultiValue }
-            .padding(vertical = 4.dp),
+          modifier = Modifier.fillMaxWidth(),
           verticalAlignment = Alignment.CenterVertically
         ) {
           Checkbox(
-            checked = isMultiValue,
-            onCheckedChange = { isMultiValue = it }
+            checked = isLocked,
+            onCheckedChange = { isLocked = it }
           )
-          Spacer(modifier = Modifier.width(8.dp))
+          Spacer(modifier = Modifier.width(4.dp))
           Text(
-            text = stringResource(R.string.settings_custom_tags_multi_value),
+            text = "Lock Field (Read-only on track sheet)",
             style = MaterialTheme.typography.bodyMedium
           )
         }
@@ -923,8 +1291,416 @@ private fun AddCustomTagFieldDialog(
     confirmButton = {
       TextButton(
         onClick = {
+          val customList = if (useDiscreteCustomList && customValuesText.isNotBlank()) {
+            customValuesText.split(",").map { it.trim() }.filter { it.isNotBlank() }
+          } else emptyList()
+
+          val parsedMin = minVal.toIntOrNull() ?: 0
+          val parsedMax = maxVal.toIntOrNull() ?: 10
+          val parsedStep = stepVal.toIntOrNull() ?: 1
+
+          val updatedScale = NumericScaleConfig(
+            min = parsedMin,
+            max = parsedMax,
+            step = parsedStep,
+            customValues = customList
+          )
+
+          onSave(
+            config.copy(
+              isMultiValue = (displayType == TagDisplayType.MULTI_CHIPS),
+              isLocked = isLocked,
+              displayType = displayType,
+              numericScale = updatedScale
+            )
+          )
+        }
+      ) {
+        Text(stringResource(R.string.settings_dialog_save))
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) {
+        Text(stringResource(android.R.string.cancel))
+      }
+    }
+  )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AddCustomTagFieldDialog(
+  availableFields: List<AvailableTagFieldEntryDto> = emptyList(),
+  onTagAdded: (CustomTagFieldConfig) -> Unit,
+  onDismiss: () -> Unit
+) {
+  var tagName by remember { mutableStateOf("") }
+  var displayType by remember { mutableStateOf(TagDisplayType.MULTI_CHIPS) }
+  var isLocked by remember { mutableStateOf(false) }
+
+  var minVal by remember { mutableStateOf("0") }
+  var maxVal by remember { mutableStateOf("10") }
+  var stepVal by remember { mutableStateOf("1") }
+  var customValuesText by remember { mutableStateOf("") }
+  var useDiscreteCustomList by remember { mutableStateOf(false) }
+  var showAvailableFields by remember { mutableStateOf(false) }
+
+  val curatedStandardTags = listOf(
+    "Mood", "Occasion", "BPM", "Tempo", "Genre", "Grouping", "Publisher", "Composer", "Comment", "Artist", "Album", "Title", "Year"
+  )
+  val customSlotsFallback = (1..16).map { "Custom$it" }
+
+  val suggestions = remember(availableFields, tagName) {
+    val clean = tagName.trim().lowercase()
+    if (availableFields.isNotEmpty()) {
+      if (clean.isEmpty()) {
+        availableFields
+      } else {
+        availableFields.filter {
+          it.name.lowercase().contains(clean) || it.slot.lowercase().contains(clean)
+        }
+      }
+    } else {
+      val fallbackList = (curatedStandardTags + customSlotsFallback).map {
+        AvailableTagFieldEntryDto(
+          name = it,
+          slot = it,
+          isCustom = it.startsWith("Custom", ignoreCase = true)
+        )
+      }
+      if (clean.isEmpty()) fallbackList
+      else fallbackList.filter { it.name.lowercase().contains(clean) }
+    }
+  }
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text(stringResource(R.string.settings_custom_tags_add_title)) },
+    text = {
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .verticalScroll(rememberScrollState())
+      ) {
+        OutlinedTextField(
+          value = tagName,
+          onValueChange = { tagName = it },
+          label = { Text(stringResource(R.string.settings_custom_tags_name_label)) },
+          placeholder = { Text("e.g. Energy, Mood, BPM, Genre") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, bottom = 4.dp),
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Text(
+            text = if (availableFields.isNotEmpty()) "Available in MusicBee:" else "Quick Suggestions:",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+          Spacer(modifier = Modifier.width(6.dp))
+          IconButton(
+            onClick = { showAvailableFields = !showAvailableFields },
+            modifier = Modifier.size(28.dp)
+          ) {
+            Surface(
+              shape = CircleShape,
+              color = if (showAvailableFields) Color(0xFFFF9800) else Color(0xFFFFA726).copy(alpha = 0.85f),
+              contentColor = Color.White,
+              modifier = Modifier.size(22.dp)
+            ) {
+              Box(contentAlignment = Alignment.Center) {
+                Text(
+                  text = "?",
+                  style = MaterialTheme.typography.labelSmall,
+                  fontWeight = FontWeight.Bold
+                )
+              }
+            }
+          }
+        }
+
+        if (showAvailableFields) {
+          Spacer(modifier = Modifier.height(4.dp))
+          Box(
+            modifier = Modifier
+              .fillMaxWidth()
+              .heightIn(max = 140.dp)
+              .verticalScroll(rememberScrollState())
+          ) {
+            FlowRow(
+              horizontalArrangement = Arrangement.spacedBy(6.dp),
+              verticalArrangement = Arrangement.spacedBy(4.dp),
+              modifier = Modifier.fillMaxWidth()
+            ) {
+              suggestions.forEach { entry ->
+                val label = if (entry.isCustom && entry.name != entry.slot) {
+                  "${entry.name} (${entry.slot})"
+                } else {
+                  entry.name
+                }
+                SuggestionChip(
+                  onClick = { tagName = entry.name },
+                  label = { Text(label, style = MaterialTheme.typography.labelSmall) }
+                )
+              }
+            }
+          }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+          text = "Modality / Input Type:",
+          style = MaterialTheme.typography.titleSmall
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Column(modifier = Modifier.selectableGroup()) {
+          // 1. Multi-Value Chips
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .selectable(
+                selected = displayType == TagDisplayType.MULTI_CHIPS,
+                onClick = { displayType = TagDisplayType.MULTI_CHIPS },
+                role = Role.RadioButton
+              )
+              .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            RadioButton(
+              selected = displayType == TagDisplayType.MULTI_CHIPS,
+              onClick = null
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+              Text(stringResource(R.string.settings_custom_tags_multi_value), style = MaterialTheme.typography.bodyMedium)
+              Text("Multiple chips separated by semicolons (e.g. Genres, Moods, Instruments)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+          }
+
+          // 2. Discrete Buttons
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .selectable(
+                selected = displayType == TagDisplayType.DISCRETE_BUTTONS,
+                onClick = {
+                  displayType = TagDisplayType.DISCRETE_BUTTONS
+                  if (minVal.isBlank()) minVal = "1"
+                  if (maxVal.isBlank()) maxVal = "10"
+                },
+                role = Role.RadioButton
+              )
+              .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            RadioButton(
+              selected = displayType == TagDisplayType.DISCRETE_BUTTONS,
+              onClick = null
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+              Text("Discrete Buttons (Clickable digits)", style = MaterialTheme.typography.bodyMedium)
+              Text("Instant single-value selector (e.g. 1-10, 1-5, or custom steps)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+          }
+
+          if (displayType == TagDisplayType.DISCRETE_BUTTONS) {
+            Column(modifier = Modifier.padding(start = 32.dp, top = 4.dp, bottom = 8.dp)) {
+              Row(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .clickable { useDiscreteCustomList = !useDiscreteCustomList },
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                Checkbox(
+                  checked = useDiscreteCustomList,
+                  onCheckedChange = { useDiscreteCustomList = it }
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Use arbitrary values list (e.g. 16, 32, 64, 128)", style = MaterialTheme.typography.bodySmall)
+              }
+
+              if (useDiscreteCustomList) {
+                OutlinedTextField(
+                  value = customValuesText,
+                  onValueChange = { customValuesText = it },
+                  label = { Text("Comma-separated values") },
+                  placeholder = { Text("16, 32, 64, 128") },
+                  singleLine = true,
+                  modifier = Modifier.fillMaxWidth()
+                )
+              } else {
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                  OutlinedTextField(
+                    value = minVal,
+                    onValueChange = { minVal = it },
+                    label = { Text("Min") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                  )
+                  OutlinedTextField(
+                    value = maxVal,
+                    onValueChange = { maxVal = it },
+                    label = { Text("Max") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                  )
+                }
+              }
+            }
+          }
+
+          // 3. Slider
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .selectable(
+                selected = displayType == TagDisplayType.SLIDER,
+                onClick = {
+                  displayType = TagDisplayType.SLIDER
+                  if (minVal == "1" && maxVal == "10") {
+                    minVal = "0"
+                    maxVal = "100"
+                    stepVal = "5"
+                  }
+                },
+                role = Role.RadioButton
+              )
+              .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            RadioButton(
+              selected = displayType == TagDisplayType.SLIDER,
+              onClick = null
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+              Text("Continuous Slider", style = MaterialTheme.typography.bodyMedium)
+              Text("Draggable numeric scale (e.g. 0 to 100)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+          }
+
+          if (displayType == TagDisplayType.SLIDER) {
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 32.dp, top = 4.dp, bottom = 8.dp),
+              horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+              OutlinedTextField(
+                value = minVal,
+                onValueChange = { minVal = it },
+                label = { Text("Min") },
+                singleLine = true,
+                modifier = Modifier.weight(1f)
+              )
+              OutlinedTextField(
+                value = maxVal,
+                onValueChange = { maxVal = it },
+                label = { Text("Max") },
+                singleLine = true,
+                modifier = Modifier.weight(1f)
+              )
+              OutlinedTextField(
+                value = stepVal,
+                onValueChange = { stepVal = it },
+                label = { Text("Step") },
+                singleLine = true,
+                modifier = Modifier.weight(1f)
+              )
+            }
+          }
+
+          // 4. Freeform Text
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .selectable(
+                selected = displayType == TagDisplayType.TEXT,
+                onClick = { displayType = TagDisplayType.TEXT },
+                role = Role.RadioButton
+              )
+              .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            RadioButton(
+              selected = displayType == TagDisplayType.TEXT,
+              onClick = null
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+              Text("Single-Value Text", style = MaterialTheme.typography.bodyMedium)
+              Text("Freeform single-line string input", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+          }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Lock Toggle
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .clickable { isLocked = !isLocked }
+            .padding(vertical = 4.dp),
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Checkbox(
+            checked = isLocked,
+            onCheckedChange = { isLocked = it }
+          )
+          Spacer(modifier = Modifier.width(8.dp))
+          Column {
+            Text("Lock tag (Read-Only)", style = MaterialTheme.typography.bodyMedium)
+            Text("Displays tag on player sheet but disables editing", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          }
+        }
+      }
+    },
+    confirmButton = {
+      TextButton(
+        onClick = {
           if (tagName.isNotBlank()) {
-            onTagAdded(tagName.trim(), isMultiValue)
+            val scaleConfig = when (displayType) {
+              TagDisplayType.DISCRETE_BUTTONS -> {
+                if (useDiscreteCustomList && customValuesText.isNotBlank()) {
+                  val values = customValuesText.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                  NumericScaleConfig(customValues = values)
+                } else {
+                  val min = minVal.toIntOrNull() ?: 0
+                  val max = maxVal.toIntOrNull() ?: 10
+                  NumericScaleConfig(min = min, max = max, step = 1)
+                }
+              }
+              TagDisplayType.SLIDER -> {
+                val min = minVal.toIntOrNull() ?: 0
+                val max = maxVal.toIntOrNull() ?: 10
+                val step = stepVal.toIntOrNull() ?: 1
+                NumericScaleConfig(min = min, max = max, step = step)
+              }
+              else -> NumericScaleConfig()
+            }
+
+            val config = CustomTagFieldConfig(
+              tag = tagName.trim(),
+              isMultiValue = (displayType == TagDisplayType.MULTI_CHIPS),
+              isEnabled = true,
+              isLocked = isLocked,
+              displayType = displayType,
+              numericScale = scaleConfig
+            )
+            onTagAdded(config)
           }
         },
         enabled = tagName.isNotBlank()

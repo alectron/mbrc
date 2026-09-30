@@ -39,4 +39,10 @@ class LibraryApiImpl(private val apiBase: ApiBase) : LibraryApi {
       BrowseTagValuesResponse::class,
       BrowseTagValuesRequest(tags)
     )
+
+  override suspend fun getAvailableTagFields(): com.kelsos.mbrc.core.networking.dto.AvailableTagFieldsResponse =
+    apiBase.getItem(
+      Protocol.AvailableTagFields,
+      com.kelsos.mbrc.core.networking.dto.AvailableTagFieldsResponse::class
+    )
 }

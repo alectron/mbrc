@@ -73,4 +73,21 @@ class TrackDetailsTest {
     assertThat(details.getTagValue("custom1")).isEqualTo("9")
     assertThat(details.getTagValue("NonExistent")).isEmpty()
   }
+
+  @Test
+  fun `getTagValue and withTagValue support dynamicTags seamlessly`() {
+    val details = TrackDetails(
+      dynamicTags = mapOf("Occasion" to "Party", "BPM" to "128")
+    )
+
+    assertThat(details.getTagValue("occasion")).isEqualTo("Party")
+    assertThat(details.getTagValue("Occasions")).isEqualTo("Party")
+    assertThat(details.getTagValue("BPM")).isEqualTo("128")
+
+    val updated = details.withTagValue("Occasion", "Chillout")
+    assertThat(updated.getTagValue("Occasion")).isEqualTo("Chillout")
+
+    val newlyAdded = details.withTagValue("Mood", "Euphoric")
+    assertThat(newlyAdded.getTagValue("Mood")).isEqualTo("Euphoric")
+  }
 }

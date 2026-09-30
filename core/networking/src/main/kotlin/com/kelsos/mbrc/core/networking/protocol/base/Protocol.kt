@@ -74,6 +74,7 @@ sealed class Protocol(val context: String) {
   object LibraryCover : Protocol(LIBRARY_COVER)
   object LibraryPlayAll : Protocol(LIBRARY_PLAY_ALL)
   object BrowseTagValues : Protocol(BROWSE_TAG_VALUES)
+  object AvailableTagFields : Protocol(AVAILABLE_TAG_FIELDS)
   object PlayerOutput : Protocol(PLAYER_OUTPUT)
   object PlayerOutputSwitch : Protocol(PLAYER_OUTPUT_SWITCH)
   object VerifyConnection : Protocol(VERIFY_CONNECTION)
@@ -148,6 +149,7 @@ sealed class Protocol(val context: String) {
     const val LIBRARY_COVER = "libraryalbumcover"
     const val LIBRARY_PLAY_ALL = "libraryplayall"
     const val BROWSE_TAG_VALUES = "browsetagvalues"
+    const val AVAILABLE_TAG_FIELDS = "availabletagfields"
 
     /**
      * Toggle action in protocol. This should be send to the functions with multiple states
@@ -208,7 +210,8 @@ sealed class Protocol(val context: String) {
         PLAYER_OUTPUT_SWITCH to PlayerOutputSwitch,
         LIBRARY_COVER to LibraryCover,
         LIBRARY_PLAY_ALL to LibraryPlayAll,
-        BROWSE_TAG_VALUES to BrowseTagValues
+        BROWSE_TAG_VALUES to BrowseTagValues,
+        AVAILABLE_TAG_FIELDS to AvailableTagFields
       )
     }
 
